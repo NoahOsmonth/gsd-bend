@@ -1,8 +1,9 @@
 name: test
 
 on:
+  # Every push, not only main: a branch that is pushed but has no pull request
+  # yet is exactly when early feedback is worth having.
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -10,7 +11,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A branch push and its pull request are the same work. Grouping on the branch
+  # name (github.head_ref is only set on pull_request events) makes the second
+  # run cancel the first instead of both running the whole matrix.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
