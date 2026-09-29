@@ -78,6 +78,33 @@ BEND-GSD/
 
 ---
 
+## Installation & Skill Distribution
+
+You can install `gsd-bend` into any repository's `.agents/skills/` directory using standard agent package tools:
+
+### Method 1: Direct CLI Installation (Self-Contained in any Project)
+Inside your target project root:
+```bash
+# Using npx or node
+node /path/to/BEND-GSD/bin/gsd-bend.js install-skill
+```
+*Creates `.agents/skills/gsd-bend/` and makes formal verification available immediately to any agent in that project.*
+
+### Method 2: Universal Agent Skills Standard (`npx skills add`)
+Using the open [skills.sh](https://www.skills.sh) registry and CLI:
+```bash
+# Install to current project's .agents/skills/
+npx skills add NoahOsmonth/gsd-bend --skill gsd-bend
+
+# Or for a specific agent (e.g. Claude Code or Cursor)
+npx skills add NoahOsmonth/gsd-bend -a claude-code
+
+# Install globally across all projects on your machine
+npx skills add NoahOsmonth/gsd-bend -g
+```
+
+---
+
 ## Quick Start
 
 ### Run the Interactive Verification Demo
@@ -92,10 +119,11 @@ npm test
 
 ### CLI Commands
 ```bash
-gsd-bend init         # Scaffold workspace with LAWS.bend & PROOF.bend
-gsd-bend law lock     # Cryptographically lock invariants
-gsd-bend law check    # Verify laws immutability
-gsd-bend verify       # Run mathematical verification gate
-gsd-bend audit        # Scan for Goodhart test falsification
-gsd-bend heal         # Generate reflection guidance on failure
+gsd-bend install-skill # Install skill into .agents/skills/ (-g for global)
+gsd-bend init          # Scaffold workspace with LAWS.bend & PROOF.bend
+gsd-bend law lock      # Cryptographically lock invariants
+gsd-bend law check     # Verify laws immutability
+gsd-bend verify        # Run mathematical verification gate
+gsd-bend audit         # Scan for Goodhart test falsification
+gsd-bend heal          # Generate reflection guidance on failure
 ```
