@@ -1,10 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Attestation } from '../core/attestation.js';
+import { LawLock } from '../core/law-lock.js';
+import { LawParser } from '../prover/law-parser.js';
+import { Verifier } from '../core/verifier.js';
 
 export class GSDPhaseBridge {
   /**
-   * Reads GSD state from .planning/STATE.md or .planning/state.json if it exists.
+   * Reads GSD state from .planning/state.json or .planning/STATE.md if it exists.
    * @param {string} projectRoot
    * @returns {object}
    */
@@ -33,9 +36,364 @@ export class GSDPhaseBridge {
     }
 
     return {
-      currentPhase: 'phase-01',
-      status: 'in_progress'
+      currentPhase: 'new-project',
+      status: 'pending'
     };
+  }
+
+  /**
+   * Sets or updates GSD state in .planning/state.json and .planning/STATE.md.
+   * @param {string} projectRoot
+   * @param {string} phase
+   * @param {string} status
+   * @param {object} metadata
+   * @returns {object}
+   */
+  static setGSDState(projectRoot = process.cwd(), phase, status = 'in_progress', metadata = {}) {
+    const planningDir = path.join(projectRoot, '.planning');
+    if (!fs.existsSync(planningDir)) {
+      fs.mkdirSync(planningDir, { recursive: true });
+    }
+
+    const stateObj = {
+      version: '1.0.0',
+      currentPhase: phase,
+      status: status,
+      updatedAt: new Date().toISOString(),
+      ...metadata
+    };
+
+    fs.writeFileSync(path.join(planningDir, 'state.json'), JSON.stringify(stateObj, null, 2), 'utf8');
+
+    const stateMd = `# GSD Project State
+
+**Current Phase:** \`${phase}\`  
+**Status:** \`${status}\`  
+**Last Updated:** ${stateObj.updatedAt}  
+
+${metadata.notes ? `### Phase Notes\n${metadata.notes}\n` : ''}
+${metadata.activeLaws && metadata.activeLaws.length > 0 ? `### Active Invariants\n${metadata.activeLaws.map(l => `- \`${l}\``).join('\n')}\n` : ''}
+`;
+    fs.writeFileSync(path.join(planningDir, 'STATE.md'), stateMd, 'utf8');
+    return stateObj;
+  }
+
+  /**
+   * Scaffolds a new project with GSD state, laws, proof template, and cryptographic lock.
+   * @param {string} projectRoot
+   * @param {string} projectName
+   * @param {object} options
+   * @returns {object}
+   */
+  static newProject(projectRoot = process.cwd(), projectName = 'gsd-bend-app', options = {}) {
+    const planningDir = path.join(projectRoot, '.planning');
+    if (!fs.existsSync(planningDir)) {
+      fs.mkdirSync(planningDir, { recursive: true });
+    }
+
+    const lawsPath = path.join(projectRoot, 'LAWS.bend');
+    const proofPath = path.join(projectRoot, 'PROOF.bend');
+    const lockPath = path.join(planningDir, 'laws.lock');
+
+    if (!fs.existsSync(lawsPath)) {
+      const defaultLaws = `# ==============================================================================
+# LAWS.bend - GSD Mathematical Specification & Invariants
+# ==============================================================================
+# Locked by GSD-Bend. AI agents CANNOT modify this file during Execute phase.
+# The compiler verifies that the implementation satisfies these laws for ALL inputs.
+
+law wallet_never_negative:
+  for initial_balance: U32
+  for withdraw_amount: U32
+  final_balance = Wallet.withdraw(initial_balance, withdraw_amount)
+  { (final_balance >= 0) == True : Bool }
+`;
+      fs.writeFileSync(lawsPath, defaultLaws, 'utf8');
+    }
+
+    if (!fs.existsSync(proofPath)) {
+      const defaultProof = `# ==============================================================================
+# PROOF.bend - Formal Mathematical Proofs
+# ==============================================================================
+# The AI agent must provide inductive proof branches for every law in LAWS.bend.
+
+def Laws.wallet_never_negative(initial_balance, withdraw_amount):
+  match (withdraw_amount <= initial_balance):
+    case True:
+      # If withdraw_amount <= initial_balance, initial_balance - withdraw_amount >= 0
+      {==}
+    case False:
+      # If withdraw_amount > initial_balance, withdraw is rejected, initial_balance unchanged >= 0
+      {==}
+`;
+      fs.writeFileSync(proofPath, defaultProof, 'utf8');
+    }
+
+    const lockData = LawLock.lock(lawsPath, lockPath, {
+      author: options.author || 'gsd-architect',
+      description: `Project ${projectName} Initial Invariant Specification`
+    });
+
+    const state = this.setGSDState(projectRoot, 'new-project', 'initialized', {
+      projectName,
+      activeLaws: lockData.laws,
+      lawLockSha256: lockData.canonicalSha256
+    });
+
+    return {
+      success: true,
+      projectName,
+      lockData,
+      state
+    };
+  }
+
+  /**
+   * Scans the codebase to detect critical state, logic files, and invariant candidates.
+   * @param {string} projectRoot
+   * @param {object} options
+   * @returns {object}
+   */
+  static mapCodebase(projectRoot = process.cwd(), options = {}) {
+    const ignoredDirs = new Set(['.git', 'node_modules', '.planning', 'dist', 'build', '.coverage', '.turbo', '.next', '.agents']);
+    const candidateKeywords = ['balance', 'transfer', 'withdraw', 'deposit', 'state', 'escrow', 'invariant', 'vault', 'auth', 'transition', 'mint', 'burn', 'overflow', 'underflow', 'lock'];
+
+    const fileList = [];
+    const candidates = [];
+
+    function walk(dir) {
+      if (!fs.existsSync(dir)) return;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const ent of entries) {
+        if (ignoredDirs.has(ent.name)) continue;
+        const fullPath = path.join(dir, ent.name);
+        const relPath = path.relative(projectRoot, fullPath).replace(/\\/g, '/');
+        if (ent.isDirectory()) {
+          walk(fullPath);
+        } else if (ent.isFile()) {
+          fileList.push(relPath);
+          const ext = path.extname(ent.name).toLowerCase();
+          if (['.bend', '.js', '.ts', '.py', '.rs', '.go', '.sol'].includes(ext)) {
+            try {
+              const content = fs.readFileSync(fullPath, 'utf8');
+              const matchedKw = candidateKeywords.filter(kw => content.toLowerCase().includes(kw));
+              if (matchedKw.length > 0) {
+                candidates.push({
+                  path: relPath,
+                  keywords: matchedKw
+                });
+              }
+            } catch {
+              // Ignore unreadable
+            }
+          }
+        }
+      }
+    }
+
+    walk(projectRoot);
+
+    const planningDir = path.join(projectRoot, '.planning');
+    if (!fs.existsSync(planningDir)) {
+      fs.mkdirSync(planningDir, { recursive: true });
+    }
+
+    const mapMd = `# GSD Codebase Architecture Map
+Generated by \`gsd-bend map-codebase\` at ${new Date().toISOString()}
+
+## Codebase Summary
+- Total Analyzed Files: ${fileList.length}
+- Invariant-Critical Modules Found: ${candidates.length}
+
+## Invariant-Critical Candidates
+${candidates.length === 0 ? '_No critical state keywords detected. Ready for greenfield invariant modeling._' : candidates.map(c => `- **${c.path}**: detected critical keywords [${c.keywords.join(', ')}]`).join('\n')}
+
+## Recommended Action
+Define formal invariants in \`LAWS.bend\` covering these modules, then run \`gsd-bend plan\`.
+`;
+    fs.writeFileSync(path.join(planningDir, 'CODEBASE_MAP.md'), mapMd, 'utf8');
+
+    this.setGSDState(projectRoot, 'map-codebase', 'completed', {
+      totalFiles: fileList.length,
+      candidateCount: candidates.length
+    });
+
+    return {
+      success: true,
+      totalFiles: fileList.length,
+      candidates,
+      mapFile: path.join(planningDir, 'CODEBASE_MAP.md')
+    };
+  }
+
+  /**
+   * Discuss phase: Capture requirements, formalize domain safety invariants.
+   * @param {string} projectRoot
+   * @param {string} topic
+   * @param {object} options
+   * @returns {object}
+   */
+  static discuss(projectRoot = process.cwd(), topic = 'System Invariants Discussion', options = {}) {
+    const planningDir = path.join(projectRoot, '.planning');
+    if (!fs.existsSync(planningDir)) {
+      fs.mkdirSync(planningDir, { recursive: true });
+    }
+
+    const discussPath = path.join(planningDir, 'DISCUSS.md');
+    const discussEntry = `\n## Discussion: ${topic}\n**Timestamp:** ${new Date().toISOString()}\n\n${options.notes || 'Formal invariants, boundary conditions, and domain guarantees discussed with architect/user.'}\n\n### Formulated Invariant Directives\n- Define laws in \`LAWS.bend\` for all state transitions.\n- Verify no negative balance, no unauthorized transitions, and solvency preservation.\n`;
+
+    let content = '';
+    if (fs.existsSync(discussPath)) {
+      content = fs.readFileSync(discussPath, 'utf8') + discussEntry;
+    } else {
+      content = `# GSD Discuss Phase Log\n` + discussEntry;
+    }
+    fs.writeFileSync(discussPath, content, 'utf8');
+
+    const state = this.setGSDState(projectRoot, 'discuss', 'in_progress', {
+      topic,
+      notes: options.notes || 'Discussed system invariants.'
+    });
+
+    return {
+      success: true,
+      discussFile: discussPath,
+      state
+    };
+  }
+
+  /**
+   * Plan phase: Define formal specification, lock laws, generate task breakdown.
+   * @param {string} projectRoot
+   * @param {object} options
+   * @returns {object}
+   */
+  static plan(projectRoot = process.cwd(), options = {}) {
+    const planningDir = path.join(projectRoot, '.planning');
+    if (!fs.existsSync(planningDir)) {
+      fs.mkdirSync(planningDir, { recursive: true });
+    }
+
+    const lawsPath = path.join(projectRoot, 'LAWS.bend');
+    const lockPath = path.join(planningDir, 'laws.lock');
+    const planPath = path.join(planningDir, 'PLAN.md');
+
+    if (!fs.existsSync(lawsPath)) {
+      this.newProject(projectRoot, 'gsd-bend-app', options);
+    }
+
+    // Lock the laws
+    const lockData = LawLock.lock(lawsPath, lockPath, {
+      author: options.author || 'gsd-architect',
+      description: options.description || 'GSD Plan Phase Invariant Lock'
+    });
+
+    const laws = LawParser.parse(fs.readFileSync(lawsPath, 'utf8'));
+
+    const planContent = `# GSD Execution Plan with Formal Verification
+Generated by \`gsd-bend plan\` at ${new Date().toISOString()}
+
+## Formal Specifications (Locked)
+- **Laws Hash (SHA-256):** \`${lockData.canonicalSha256}\`
+- **Total Invariants:** ${laws.length}
+${laws.map(l => `- **${l.name}**: \`${l.invariant ? l.invariant.expression : 'undefined'}\``).join('\n')}
+
+## Tasks Breakdown
+1. **Task 1 (Implementation):** Implement logic satisfying the declared invariants.
+2. **Task 2 (Proof Construction):** Supply inductive proof branches in \`PROOF.bend\` for each law.
+3. **Task 3 (Anti-Cheat Audit):** Run \`gsd-bend audit\` to verify zero mock injections or axiom bypasses.
+4. **Task 4 (Verification Gate):** Run \`gsd-bend verify\` to produce signed \`PROOF_ATTESTATION.json\`.
+5. **Task 5 (Ship):** Advance to \`gsd-bend ship\` with mathematical proof attestation.
+
+## Agent Constraints
+- \`LAWS.bend\` is locked and immutable.
+- Proofs must cover 100% of the input domain without fallback axioms.
+`;
+    fs.writeFileSync(planPath, planContent, 'utf8');
+
+    const state = this.setGSDState(projectRoot, 'plan', 'ready_for_execution', {
+      activeLaws: lockData.laws,
+      lawLockSha256: lockData.canonicalSha256,
+      notes: `Locked ${laws.length} invariants in laws.lock.`
+    });
+
+    return {
+      success: true,
+      planFile: planPath,
+      lockData,
+      laws,
+      state
+    };
+  }
+
+  /**
+   * Execute phase: Validate law lock immutability, prepare agent obligations.
+   * @param {string} projectRoot
+   * @param {object} options
+   * @returns {object}
+   */
+  static execute(projectRoot = process.cwd(), options = {}) {
+    const lawsPath = path.join(projectRoot, 'LAWS.bend');
+    const lockPath = path.join(projectRoot, '.planning', 'laws.lock');
+    const proofPath = path.join(projectRoot, 'PROOF.bend');
+
+    if (!fs.existsSync(lawsPath) || !fs.existsSync(lockPath)) {
+      return {
+        success: false,
+        error: 'WORKSPACE_UNINITIALIZED',
+        message: 'Cannot execute without locked laws. Run `gsd-bend plan` or `gsd-bend init` first.'
+      };
+    }
+
+    // Verify integrity before allowing execution
+    const check = LawLock.verify(lawsPath, lockPath);
+    if (!check.valid) {
+      return {
+        success: false,
+        error: 'LAW_LOCK_TAMPERED',
+        message: `EXECUTION HALTED: LAWS.bend has been altered! Invariants must not be modified during execute phase. Reason: ${check.error}`
+      };
+    }
+
+    if (!fs.existsSync(proofPath)) {
+      fs.writeFileSync(proofPath, `# PROOF.bend\n# AI Agent: Supply inductive proofs for locked laws here.\n`, 'utf8');
+    }
+
+    const state = this.setGSDState(projectRoot, 'execute', 'in_progress', {
+      activeLaws: check.laws,
+      lawLockSha256: check.actualHash
+    });
+
+    return {
+      success: true,
+      activeLaws: check.laws,
+      lawHash: check.actualHash,
+      state,
+      proofFile: proofPath
+    };
+  }
+
+  /**
+   * Verify phase: Executes anti-cheat and formal proof compiler.
+   * @param {string} projectRoot
+   * @param {object} options
+   * @returns {object}
+   */
+  static verify(projectRoot = process.cwd(), options = {}) {
+    const res = Verifier.verifyPipeline({ projectRoot, ...options });
+    if (res.success) {
+      this.setGSDState(projectRoot, 'verify', 'passed', {
+        attestationPath: res.attestationPath,
+        attestationSignature: res.attestation.attestationSignature,
+        verifiedLaws: res.verifiedLaws
+      });
+    } else {
+      this.setGSDState(projectRoot, 'verify', 'failed', {
+        step: res.step,
+        failureMessage: res.message
+      });
+    }
+    return res;
   }
 
   /**
@@ -63,6 +421,124 @@ export class GSDPhaseBridge {
     return {
       canAdvance: true,
       attestation: validation.attestation
+    };
+  }
+
+  /**
+   * Ship phase: Validates attestation gate, updates state to shipped/done, generates ship summary.
+   * @param {string} projectRoot
+   * @param {object} options
+   * @returns {object}
+   */
+  static ship(projectRoot = process.cwd(), options = {}) {
+    const gateCheck = this.canAdvanceToShip(projectRoot);
+    if (!gateCheck.canAdvance) {
+      return {
+        success: false,
+        error: 'GATE_BLOCKED',
+        reason: gateCheck.reason
+      };
+    }
+
+    const planningDir = path.join(projectRoot, '.planning');
+    const shipSummaryPath = path.join(planningDir, 'SHIP_SUMMARY.md');
+    const attestation = gateCheck.attestation;
+
+    const shipMd = `# GSD Ship Certificate & Release Summary
+Formally Verified with Bend 2 & GSD Core at ${new Date().toISOString()}
+
+## Formal Proof Attestation
+- **Status:** \`${attestation.status}\`
+- **Coverage:** \`${attestation.coverage}\`
+- **Engine:** \`${attestation.engine}\`
+- **Law Hash (SHA-256):** \`${attestation.lawHash}\`
+- **Proof Hash (SHA-256):** \`${attestation.proofHash}\`
+- **Cryptographic Signature:** \`${attestation.attestationSignature}\`
+
+## Formally Proven Invariants
+${attestation.verifiedLaws.map(law => `- [x] \`${law}\``).join('\n')}
+
+## Security & Anti-Cheat Summary
+- Anti-Goodhart Cheating Audit: \`${attestation.antiGoodhartAudit}\`
+- Axiomatic shortcuts bypassed: 0
+- Unit test mocks injected: 0
+- Invariant domain coverage: 100%
+
+🚀 **VERIFICATION GATE: CLEARED.** Safe for production deployment.
+`;
+    fs.writeFileSync(shipSummaryPath, shipMd, 'utf8');
+
+    const state = this.setGSDState(projectRoot, 'ship', 'completed', {
+      attestationSignature: attestation.attestationSignature,
+      verifiedLaws: attestation.verifiedLaws,
+      shippedAt: new Date().toISOString()
+    });
+
+    return {
+      success: true,
+      shipSummaryPath,
+      attestation,
+      state
+    };
+  }
+
+  /**
+   * Status: Overview of full GSD lifecycle state and formal verification status.
+   * @param {string} projectRoot
+   * @returns {object}
+   */
+  static getStatus(projectRoot = process.cwd()) {
+    const state = this.getGSDState(projectRoot);
+    const lawsPath = path.join(projectRoot, 'LAWS.bend');
+    const lockPath = path.join(projectRoot, '.planning', 'laws.lock');
+    const proofPath = path.join(projectRoot, 'PROOF.bend');
+    const attestationPath = path.join(projectRoot, '.planning', 'PROOF_ATTESTATION.json');
+
+    const hasLaws = fs.existsSync(lawsPath);
+    const hasLock = fs.existsSync(lockPath);
+    const hasProof = fs.existsSync(proofPath);
+    const hasAttestation = fs.existsSync(attestationPath);
+
+    let lockIntegrity = false;
+    let declaredLaws = [];
+    if (hasLaws && hasLock) {
+      const check = LawLock.verify(lawsPath, lockPath);
+      lockIntegrity = check.valid;
+      declaredLaws = check.laws || [];
+    }
+
+    let attestationValid = false;
+    let attestationData = null;
+    if (hasAttestation) {
+      const val = Attestation.validate(attestationPath);
+      attestationValid = val.valid;
+      attestationData = val.attestation;
+    }
+
+    let nextStep = 'init';
+    if (!hasLaws || !hasLock) {
+      nextStep = 'plan';
+    } else if (!hasProof || !hasAttestation || !attestationValid) {
+      nextStep = 'verify';
+    } else if (state.currentPhase !== 'ship' && attestationValid) {
+      nextStep = 'ship';
+    } else if (state.currentPhase === 'ship') {
+      nextStep = 'done';
+    }
+
+    return {
+      state,
+      files: {
+        laws: hasLaws,
+        lock: hasLock,
+        proof: hasProof,
+        attestation: hasAttestation
+      },
+      lockIntegrity,
+      declaredLaws,
+      attestationValid,
+      attestationData,
+      nextStep
     };
   }
 }

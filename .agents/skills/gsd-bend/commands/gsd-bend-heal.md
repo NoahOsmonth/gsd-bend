@@ -1,10 +1,12 @@
-# /gsd-bend:heal
+# /gsd-bend:heal or /gsd-bend-heal
 
 Generate structured diagnostic feedback and a reflection prompt for the AI agent when mathematical proof verification fails.
 
 ## Usage
 ```bash
 /gsd-bend:heal
+# or
+/gsd-bend-heal
 # or via CLI
 gsd-bend heal
 ```

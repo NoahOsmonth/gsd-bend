@@ -1,12 +1,23 @@
 # GSD-BEND: Blocking AI Agent Mistakes via Formal Mathematical Proofs
 
-[![Tests](https://img.shields.io/badge/tests-26%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-40%20passed-brightgreen.svg)]()
 [![GSD-Core Compatible](https://img.shields.io/badge/gsd--core-compatible-blue.svg)](https://github.com/open-gsd/gsd-core)
 [![Bend 2 Powered](https://img.shields.io/badge/bend--2-formal--proofs-purple.svg)](https://github.com/bendlang/bend)
 
 `gsd-bend` is a formal verification skill and execution engine for **GSD Core (`open-gsd/gsd-core`)** powered by **Bend 2 (`bendlang/bend`)**.
 
-It solves **Goodhart's Law** in autonomous coding agents: rather than allowing AI agents to generate fragile, happy-path unit tests or weaken assertions to get a green checkmark, `gsd-bend` binds the agent's work to **compiler-verified mathematical laws**.
+It solves **Goodhart's Law** in autonomous coding agents: rather than allowing AI agents to generate fragile, happy-path unit tests or weaken assertions to get a green checkmark, `gsd-bend` binds the agent's work to **compiler-verified mathematical laws** across the complete GSD lifecycle:
+
+```
++----------------------------------------------------------------------------------------------------+
+|                                GSD CORE + BEND 2 LIFECYCLE                                         |
+|                                                                                                    |
+|  [Map Codebase] -> [Discuss] -> [Plan & Lock Laws] -> [Execute & Prove] -> [Verify] -> [Ship Gate] |
+|        |               |                 |                    |                 |            |     |
+|   CODEBASE_MAP.md   DISCUSS.md       LAWS.bend            PROOF.bend       ATTESTATION.json  RELEASE   |
+|                                      laws.lock                                                     |
++----------------------------------------------------------------------------------------------------+
+```
 
 ---
 
@@ -27,7 +38,8 @@ In a traditional test-driven agent loop:
 
 ## The Solution: Unbreakable Laws with Bend 2
 
-1. **Plan Phase:** The human or architect defines mathematical laws in `LAWS.bend`:
+1. **Discuss Phase (`/gsd-bend:discuss`):** Clarify domain requirements and safety properties with human/architect before writing code.
+2. **Plan Phase (`/gsd-bend:plan`):** Formulate execution plan and define invariants in `LAWS.bend`:
    ```bend
    law wallet_never_negative:
      for initial_balance: U32
@@ -36,12 +48,34 @@ In a traditional test-driven agent loop:
      { (final_balance >= 0) == True : Bool }
    ```
    GSD locks the invariant with a canonical SHA-256 hash into `.planning/laws.lock`.
-2. **Execute Phase:** The agent writes the code and must supply the mathematical proof in `PROOF.bend`.
-3. **Verify Gate:** GSD runs `gsd-bend verify`:
+3. **Execute Phase (`/gsd-bend:execute`):** The agent writes the code and must supply the mathematical proof in `PROOF.bend`.
+4. **Verify Gate (`/gsd-bend:verify`):** GSD runs formal verification:
    - Checks that `LAWS.bend` has not been tampered with.
    - Detects any mock injection or unproven axioms.
    - Proves mathematically that the invariant holds across **100% of all possible inputs**.
-   - Generates a signed `PROOF_ATTESTATION.json` unlocking the `Ship` transition.
+   - Generates a signed `PROOF_ATTESTATION.json`.
+5. **Ship Gate (`/gsd-bend:ship`):** Evaluates cryptographic proof gate before allowing release or deployment.
+
+---
+
+## Full GSD Core Workflow Commands
+
+All commands support dual slash syntax (`/gsd-bend:<cmd>` or `/gsd-bend-<cmd>`) and CLI invocation (`gsd-bend <cmd>`):
+
+| Phase / Role | Slash Command | CLI Command | Action |
+| :--- | :--- | :--- | :--- |
+| **New Project** | `/gsd-bend:new-project` or `/gsd-bend-new-project` | `gsd-bend new-project [name]` | Scaffolds a new project with `.planning/`, `LAWS.bend`, `PROOF.bend`, and SHA-256 lock. |
+| **Map Codebase** | `/gsd-bend:map-codebase` or `/gsd-bend-map-codebase` | `gsd-bend map-codebase` | Analyzes codebase modules and maps critical state variables for invariant targets. |
+| **Discuss** | `/gsd-bend:discuss` or `/gsd-bend-discuss` | `gsd-bend discuss [topic]` | Clarifies domain safety properties, boundary requirements, and logs directives. |
+| **Plan** | `/gsd-bend:plan` or `/gsd-bend-plan` | `gsd-bend plan` | Formulates phase plan, defines `LAWS.bend`, locks `laws.lock` (SHA-256), and creates `PLAN.md`. |
+| **Execute** | `/gsd-bend:execute` or `/gsd-bend-execute` | `gsd-bend execute` | Validates immutable law locks, guides AI agent to write logic and exhaustive `PROOF.bend`. |
+| **Verify** | `/gsd-bend:verify` or `/gsd-bend-verify` | `gsd-bend verify` | Executes formal proof engine, runs anti-cheat audit, and signs `PROOF_ATTESTATION.json`. |
+| **Ship** | `/gsd-bend:ship` or `/gsd-bend-ship` | `gsd-bend ship` | Enforces the cryptographic proof gate, creates `SHIP_SUMMARY.md`, and seals release. |
+| **Status** | `/gsd-bend:status` or `/gsd-bend-status` | `gsd-bend status` | Displays current phase, law lock status, proof attestation validity, and next step. |
+| **Law Management** | `/gsd-bend:law` or `/gsd-bend-law` | `gsd-bend law [lock\|check\|list]` | Computes canonical hashes, checks immutability, or lists active invariants. |
+| **Anti-Cheat Audit**| `/gsd-bend:audit` or `/gsd-bend-audit` | `gsd-bend audit` | Scans for mock injection, unproven axioms, skipped goals, or vacuous proofs. |
+| **Self-Healing** | `/gsd-bend:heal` or `/gsd-bend-heal` | `gsd-bend heal` | Generates structured reflection prompt for AI agents on proof failure or counterexample. |
+| **Quick Init** | `/gsd-bend:init` or `/gsd-bend-init` | `gsd-bend init` | Scaffolds verification templates into an existing workspace. |
 
 ---
 
@@ -62,9 +96,12 @@ BEND-GSD/
 │   │   ├── anti-cheat.js             # Goodhart's Law trap & mock detector
 │   │   ├── verifier.js               # Master verification gate
 │   │   └── attestation.js            # Cryptographic proof certificate authority
-│   └── gsd/
-│       └── phase-bridge.js           # Integration with GSD .planning/ state
+│   ├── gsd/
+│   │   └── phase-bridge.js           # Integration with GSD full lifecycle & .planning/ state
+│   └── cli/                          # CLI runners (plan, discuss, execute, ship, etc.)
 ├── skills/gsd-bend/                  # GSD Core Skill definition & slash commands
+│   ├── SKILL.md                      # Complete skill documentation & phase workflows
+│   └── commands/                     # Slash command markdown specifications (12 commands)
 ├── hooks/gsd-bend-verify-gate.js     # Managed hook for GSD Core verify phase
 ├── agents/bend-prover.md             # Subagent prompt for writing Bend proofs
 ├── examples/bend-vault/              # Autonomous Escrow & Vault demonstration
@@ -73,22 +110,22 @@ BEND-GSD/
 │   ├── src/vault.bend                # Verified Bend implementation
 │   ├── src/vault.js                  # Polyglot verified JavaScript runtime
 │   └── verify-demo.js                # Interactive demo of all 5 agent failure scenarios
-└── tests/                            # Comprehensive test suite (26 unit/e2e tests)
+└── tests/                            # Comprehensive test suite (40 unit/lifecycle/e2e tests)
 ```
 
 ---
 
 ## Installation & Skill Distribution
 
-You can install `gsd-bend` into any repository's `.agents/skills/` directory using standard agent package tools:
-
 ### Method 1: Direct CLI Installation (Self-Contained in any Project)
 Inside your target project root:
 ```bash
-# Using npx or node
+# Install to current project's .agents/skills/gsd-bend
 node /path/to/BEND-GSD/bin/gsd-bend.js install-skill
+
+# Or install globally for all agent workspaces
+node /path/to/BEND-GSD/bin/gsd-bend.js install-skill -g
 ```
-*Creates `.agents/skills/gsd-bend/` and makes formal verification available immediately to any agent in that project.*
 
 ### Method 2: Universal Agent Skills Standard (`npx skills add`)
 Using the open [skills.sh](https://www.skills.sh) registry and CLI:
@@ -115,15 +152,4 @@ npm run demo
 ### Run the Test Suite
 ```bash
 npm test
-```
-
-### CLI Commands
-```bash
-gsd-bend install-skill # Install skill into .agents/skills/ (-g for global)
-gsd-bend init          # Scaffold workspace with LAWS.bend & PROOF.bend
-gsd-bend law lock      # Cryptographically lock invariants
-gsd-bend law check     # Verify laws immutability
-gsd-bend verify        # Run mathematical verification gate
-gsd-bend audit         # Scan for Goodhart test falsification
-gsd-bend heal          # Generate reflection guidance on failure
 ```

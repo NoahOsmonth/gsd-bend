@@ -4,6 +4,13 @@ import { runVerify } from './verify.js';
 import { runAudit } from './audit.js';
 import { runHeal } from './heal.js';
 import { runInstallSkill } from './install-skill.js';
+import { runPlan } from './plan.js';
+import { runDiscuss } from './discuss.js';
+import { runExecute } from './execute.js';
+import { runShip } from './ship.js';
+import { runMapCodebase } from './map-codebase.js';
+import { runNewProject } from './new-project.js';
+import { runStatus } from './status.js';
 import { GSDPhaseBridge } from '../gsd/phase-bridge.js';
 
 export function main(args = process.argv.slice(2)) {
@@ -21,15 +28,61 @@ export function main(args = process.argv.slice(2)) {
     case 'init':
       return runInit();
 
-    case 'law': {
-      const sub = args[1] || 'list';
-      const res = runLaw(sub);
+    case 'new-project':
+    case 'new': {
+      const projectName = args[1] || 'gsd-bend-app';
+      const res = runNewProject(projectName);
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
+    case 'map-codebase':
+    case 'map': {
+      const res = runMapCodebase();
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
+    case 'discuss': {
+      const topic = args.slice(1).join(' ') || 'System Invariants Discussion';
+      const res = runDiscuss(topic);
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
+    case 'plan': {
+      const res = runPlan();
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
+    case 'execute': {
+      const res = runExecute();
       if (!res.success) process.exitCode = 1;
       return res;
     }
 
     case 'verify': {
       const res = runVerify();
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
+    case 'ship': {
+      const res = runShip();
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
+    case 'status': {
+      const res = runStatus();
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
+    case 'law': {
+      const sub = args[1] || 'list';
+      const res = runLaw(sub);
       if (!res.success) process.exitCode = 1;
       return res;
     }
@@ -63,20 +116,28 @@ export function main(args = process.argv.slice(2)) {
       console.log(`
 gsd-bend: Formal Verification Skill & Engine for GSD Core
 
-Usage:
-  gsd-bend <command> [options]
+Full GSD Lifecycle Commands:
+  new-project [name]  Scaffold a new formally verified GSD project
+  map-codebase        Analyze codebase architecture and locate invariant targets
+  discuss [topic]     Capture domain requirements and define safety invariants
+  plan                Formulate phase plan, lock LAWS.bend with SHA-256 in laws.lock
+  execute             Run AI implementation and inductive proof construction
+  verify              Compile Bend 2 formal proofs and generate attestation
+  ship                Enforce verification gate and seal release with proof certificate
+  status              Display current GSD phase lifecycle and proof gate status
 
-Commands:
-  install-skill   Install gsd-bend skill into .agents/skills/ in the current project (-g for global)
-  init            Initialize GSD-Bend in the current project (.planning/, LAWS.bend, PROOF.bend)
-  law lock        Lock LAWS.bend with SHA-256 canonical hash
-  law check       Verify LAWS.bend integrity against laws.lock
-  law list        List all declared laws and mathematical invariants
-  verify          Execute the Bend 2 formal proof verification gate
-  audit           Scan for Goodhart cheating traps, mock injection, and vacuous proofs
-  heal            Generate actionable reflection prompt for AI agents on proof failure
-  gate            Check if current phase has valid proof attestation to advance to Ship
-  help            Show this help message
+Proof & Security Commands:
+  law lock            Lock LAWS.bend with SHA-256 canonical hash
+  law check           Verify LAWS.bend integrity against laws.lock
+  law list            List all declared laws and mathematical invariants
+  audit               Scan for Goodhart cheating traps, mock injection, and vacuous proofs
+  heal                Generate actionable reflection prompt for AI agents on proof failure
+  gate                Direct hook checking if current phase can advance to Ship
+
+Integration Commands:
+  install-skill       Install skill into .agents/skills/ (-g for global agent skills)
+  init                Quick initialize GSD-Bend in current project
+  help                Show this help message
 `);
       return { success: true };
   }

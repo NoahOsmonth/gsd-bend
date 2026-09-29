@@ -1,12 +1,20 @@
-# /gsd-bend:law
+# /gsd-bend:law or /gsd-bend-law
 
-Manage and lock mathematical laws in `LAWS.bend`.
+Manage, inspect, and cryptographically lock mathematical laws in `LAWS.bend`.
 
 ## Usage
 ```bash
 /gsd-bend:law lock
 /gsd-bend:law check
 /gsd-bend:law list
+# or
+/gsd-bend-law lock
+/gsd-bend-law check
+/gsd-bend-law list
+# or via CLI
+gsd-bend law lock
+gsd-bend law check
+gsd-bend law list
 ```
 
 ## Subcommands

@@ -1,10 +1,12 @@
-# /gsd-bend:verify
+# /gsd-bend:verify or /gsd-bend-verify
 
 Run the formal verification gate to mechanically check all laws against `PROOF.bend`.
 
 ## Usage
 ```bash
 /gsd-bend:verify
+# or
+/gsd-bend-verify
 # or via CLI
 gsd-bend verify
 ```
