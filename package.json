@@ -8,8 +8,11 @@
   },
   "type": "module",
   "scripts": {
-    "test": "node --test tests/**/*.test.js",
+    "test": "node --test tests/*.test.js",
     "demo": "node examples/bend-vault/verify-demo.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "keywords": [
     "gsd",

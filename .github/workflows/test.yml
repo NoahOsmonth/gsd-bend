@@ -1,0 +1,133 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The suite is dependency-free ESM, so this is just node + the runner.
+  unit:
+    name: unit tests (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24', '26']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Run the suite
+        run: npm test
+
+  # The claims this project actually makes are about Bend, so check them against
+  # the real compiler rather than only the JS fallback.
+  proof-gate:
+    name: real Bend proof gate
+    runs-on: ubuntu-latest
+    env:
+      BEND_VERSION: '2.0.34'
+      # Pinned so a re-tagged or swapped upstream release cannot change what CI runs.
+      BEND_SHA256: '78106a97af242429dcc057258eb8d10f69cddebcd5e263022185a52d003e09bf'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Bend ${{ env.BEND_VERSION }} (pinned release binary)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o bend.tar.gz \
+            "https://github.com/bendlang/bend/releases/download/v${BEND_VERSION}/bend-${BEND_VERSION}-linux-x64.tar.gz"
+          echo "${BEND_SHA256}  bend.tar.gz" | sha256sum -c -
+          tar -xzf bend.tar.gz
+          echo "$PWD/bend/bin" >> "$GITHUB_PATH"
+
+      - name: Bend is on PATH
+        run: bend version
+
+      # Guards the project's headline claim: the example ships laws the real
+      # compiler accepts.
+      - name: The shipped example must actually prove
+        working-directory: examples/bend-vault
+        run: |
+          set -euo pipefail
+          out="$(bend PROOF.bend 2>&1)"
+          echo "$out"
+          grep -q "ALL PROOFS CHECK" <<<"$out"
+
+      # A gate that cannot fail is decorative. This is the check that keeps the
+      # laws honest - and it is the reason the vacuous `balance >= 0` law had to
+      # go.
+      - name: Negative control - the gate must be able to fail
+        working-directory: examples/bend-vault
+        run: |
+          set -euo pipefail
+          cp LAWS.bend LAWS.bend.bak
+          trap 'mv -f LAWS.bend.bak LAWS.bend' EXIT
+          sed -i 's/== 0n : Nat/== 1n : Nat/' LAWS.bend
+          if bend PROOF.bend > broken.txt 2>&1; then
+            echo "::error::the gate accepted a deliberately broken law - it is decorative"
+            cat broken.txt
+            exit 1
+          fi
+          cat broken.txt
+          grep -q "SOME PROOFS FAIL" broken.txt
+          rm -f broken.txt
+
+      # Regression guard for the bug this project shipped with: detect() probed
+      # `bend --version`, so the real compiler was never found and a five-value
+      # sample was reported as `100%_DOMAIN_PROVED`.
+      - name: The engine must use the real compiler, not the sampler
+        working-directory: examples/bend-vault
+        run: |
+          set -euo pipefail
+          out="$(node ../../bin/gsd-bend.js verify 2>&1)"
+          echo "$out"
+          grep -q "Native Bend Compiler" <<<"$out"
+          grep -q "ALL_INPUTS_CHECKED_BY_BEND" <<<"$out"
+          if grep -qE "100%_DOMAIN_PROVED|MATHEMATICALLY_PROVEN" <<<"$out"; then
+            echo "::error::the engine reported a proof it did not perform"
+            exit 1
+          fi
+
+      - name: A fresh scaffold must compile
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          cd "$tmp"
+          node "$GITHUB_WORKSPACE/bin/gsd-bend.js" init > /dev/null
+          out="$(bend PROOF.bend 2>&1)"
+          echo "$out"
+          grep -q "ALL PROOFS CHECK" <<<"$out"
+
+      # Without a compiler the engine must say so, not claim a proof. Forcing the
+      # engine (rather than hiding `bend` from PATH) keeps node on PATH too.
+      - name: Without Bend the engine must report a sample, not a proof
+        working-directory: examples/bend-vault
+        env:
+          GSD_BEND_ENGINE: builtin
+        run: |
+          set -euo pipefail
+          out="$(node ../../bin/gsd-bend.js verify 2>&1)"
+          echo "$out"
+          grep -q "SAMPLED_NO_COUNTEREXAMPLE" <<<"$out"
+          if grep -qE "100%_DOMAIN_PROVED|MATHEMATICALLY_PROVEN" <<<"$out"; then
+            echo "::error::the sampled fallback reported a proof"
+            exit 1
+          fi
+          if grep -q "Native Bend Compiler" <<<"$out"; then
+            echo "::error::the fallback claimed to be the native compiler"
+            exit 1
+          fi
