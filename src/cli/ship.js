@@ -17,12 +17,23 @@ export function runShip(options = {}) {
   }
 
   console.log('================================================================');
-  console.log('  🎉 GSD-BEND SHIP GATE CLEARED: 100% FORMALLY VERIFIED');
+  console.log('  🎉 GSD-BEND SHIP GATE CLEARED');
   console.log('================================================================');
   console.log(`Proof Status:       ${res.attestation.status}`);
+  console.log(`Coverage:           ${res.attestation.coverage}`);
+  console.log(`Engine:             ${res.attestation.engine}`);
   console.log(`Verified Laws:      ${res.attestation.verifiedLaws.join(', ')}`);
-  console.log(`Proof Attestation:  ${res.attestation.attestationSignature.slice(0, 16)}...`);
+  console.log(
+    `Proof Attestation:  ${res.attestation.signed
+      ? `HMAC-SHA256 signed (${res.attestation.attestationSignature.slice(0, 16)}...)`
+      : `UNSIGNED checksum ${res.attestation.attestationSignature.slice(0, 16)}... - integrity only`}`
+  );
   console.log(`Ship Summary Log:   ${res.shipSummaryPath}`);
+  if (res.attestation.engine !== 'bend') {
+    console.log('----------------------------------------------------------------');
+    console.log('NOTE: this gate was cleared by the sampled evaluator, which checks a handful of');
+    console.log('      values per parameter and does NOT prove the laws. Install Bend for proofs.');
+  }
   console.log('----------------------------------------------------------------');
   console.log('🚀 Phase lifecycle completed! Ready for release & deployment.\n');
 

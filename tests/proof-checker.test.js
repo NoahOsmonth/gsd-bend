@@ -12,6 +12,15 @@ law balance_non_negative:
   { (final_balance >= 0) == True : Bool }
 `;
 
+  // The law above calls `Wallet.withdraw`, so an implementation must actually be
+  // bound for the law to be checkable. Without this the checker now refuses the
+  // law as UNBOUND_IMPLEMENTATION rather than reporting it as verified.
+  const walletEnv = {
+    Wallet: {
+      withdraw: (balance, amount) => (amount <= balance ? balance - amount : balance)
+    }
+  };
+
   test('LawParser correctly extracts law names, params, and invariants', () => {
     const parsed = LawParser.parse(sampleLaws);
     assert.strictEqual(parsed.length, 1);
@@ -27,7 +36,7 @@ law balance_non_negative:
 def Laws.different_law(x):
   {==}
 `;
-    const res = ProofChecker.verify(sampleLaws, proof);
+    const res = ProofChecker.verify(sampleLaws, proof, walletEnv);
     assert.strictEqual(res.success, false);
     assert.strictEqual(res.errors[0].includes('Missing proof for law'), true);
   });
@@ -37,7 +46,7 @@ def Laws.different_law(x):
 def Laws.balance_non_negative(only_one_param):
   {==}
 `;
-    const res = ProofChecker.verify(sampleLaws, proof);
+    const res = ProofChecker.verify(sampleLaws, proof, walletEnv);
     assert.strictEqual(res.success, false);
     assert.strictEqual(res.errors[0].includes('parameter mismatch'), true);
   });
@@ -51,7 +60,7 @@ def Laws.balance_non_negative(balance, amount):
     case False:
       {?}
 `;
-    const res = ProofChecker.verify(sampleLaws, proof);
+    const res = ProofChecker.verify(sampleLaws, proof, walletEnv);
     assert.strictEqual(res.success, false);
     assert.strictEqual(res.errors[0].includes('contains unsolved proof hole'), true);
   });
@@ -63,7 +72,7 @@ def Laws.balance_non_negative(balance, amount):
     case True:
       {==}
 `;
-    const res = ProofChecker.verify(sampleLaws, proof);
+    const res = ProofChecker.verify(sampleLaws, proof, walletEnv);
     assert.strictEqual(res.success, false);
     assert.strictEqual(res.errors[0].includes('Non-exhaustive proof'), true);
     assert.strictEqual(res.errors[0].includes("omits 'case False'"), true);
@@ -78,7 +87,7 @@ def Laws.balance_non_negative(balance, amount):
     case False:
       {==}
 `;
-    const res = ProofChecker.verify(sampleLaws, proof);
+    const res = ProofChecker.verify(sampleLaws, proof, walletEnv);
     assert.strictEqual(res.success, true);
     assert.strictEqual(res.verifiedLaws.length, 1);
     assert.strictEqual(res.verifiedLaws[0], 'balance_non_negative');
@@ -89,7 +98,7 @@ def Laws.balance_non_negative(balance, amount):
 def Laws.balance_non_negative(balance, amount):
   {==}
 `;
-    const res = ProofChecker.verify(sampleLaws, fakeProof);
+    const res = ProofChecker.verify(sampleLaws, fakeProof, walletEnv);
     assert.strictEqual(res.success, false);
     assert.strictEqual(res.errors[0].includes('conditional invariant requires case analysis'), true);
   });
@@ -122,7 +131,28 @@ def Laws.balance_non_negative(balance: U32, amount: U32):
     case False:
       {==}
 `;
-    const res = ProofChecker.verify(sampleLaws, proofWithTypes);
+    const res = ProofChecker.verify(sampleLaws, proofWithTypes, walletEnv);
     assert.strictEqual(res.success, true);
+  });
+
+  test('ProofChecker refuses a law whose implementation was never bound', () => {
+    // Regression: an empty implementationEnv used to skip the semantic check
+    // entirely while still reporting the law as verified, so a project the
+    // loader could not import from (e.g. TypeScript) got a green gate without
+    // its code ever running.
+    const proof = `
+def Laws.balance_non_negative(balance, amount):
+  match (amount <= balance):
+    case True:
+      {==}
+    case False:
+      {==}
+`;
+    const res = ProofChecker.verify(sampleLaws, proof);
+    assert.strictEqual(res.success, false);
+    assert.strictEqual(res.errors[0].includes('Unbound implementation'), true);
+    assert.strictEqual(res.errors[0].includes('Wallet'), true);
+    assert.deepStrictEqual(res.diagnostics[0].status, 'UNBOUND_IMPLEMENTATION');
+    assert.deepStrictEqual(res.diagnostics[0].missing, ['Wallet']);
   });
 });

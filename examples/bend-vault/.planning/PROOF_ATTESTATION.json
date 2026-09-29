@@ -1,17 +1,19 @@
 {
   "version": "1.0.0",
-  "status": "MATHEMATICALLY_PROVEN",
+  "status": "PROOFS_CHECKED",
   "phase": "verify",
-  "timestamp": "2026-09-29T07:06:00.498Z",
-  "engine": "bend-2-formal-prover",
-  "lawHash": "472d539c852bb387b91c6f2b1917c07f5ba64a4ff5ee19fc8f9e0d04d561c57e",
-  "proofHash": "5eacf7a07f90df8d7e6f3c9b6cc727f47369714c34fbc46f1c7278bbe2583c08",
+  "timestamp": "2026-09-29T11:27:37.407Z",
+  "engine": "bend",
+  "runner": "Native Bend Compiler (bend 2.0.34)",
+  "lawHash": "ac78e7d5123a3c5ee3163682ceba9ab046f2ca393d5334a03447b6735d20eb88",
+  "proofHash": "f83d7d1a54502293308a50e800e92f906d57a3c426a994a06d1d6ebf5fa803dd",
   "verifiedLaws": [
-    "wallet_never_negative",
-    "vault_solvency",
-    "escrow_state_transition"
+    "withdraw_zero_noop",
+    "withdraw_all_empties"
   ],
-  "coverage": "100%_DOMAIN_PROVED",
+  "coverage": "ALL_INPUTS_CHECKED_BY_BEND",
   "antiGoodhartAudit": "PASSED",
-  "attestationSignature": "fec3fedc15857b287ecadb015df7c2349fe857721911456b7fd66771634d7116"
+  "signatureKind": "unkeyed-checksum",
+  "signed": false,
+  "attestationSignature": "896c47e07372e1acaaf23422238fe2612701a8eb9b1db515a7e44c5ed5888e37"
 }

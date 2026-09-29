@@ -1,56 +1,52 @@
 # ==============================================================================
-# PROOF.bend - Formal Proofs for BendVault
+# PROOF.bend - THE PROOFS (BendVault example)
 # ==============================================================================
-# Inductive proofs written by the agent covering 100% of input domains.
+# The agent writes this file, alongside the code. Each def fills the law of the
+# same name declared in LAWS.bend; Bend refuses a PROOF.bend that sits beside a
+# LAWS.bend without importing it.
+#
+# `{==}` proves a goal whose two sides compute to the same term. A failed step
+# prints the expected and observed terms, which is what makes the gate useful:
+# there is no way to assert a proof, only to give one.
 
-def Laws.wallet_never_negative(initial_balance, withdraw_amount):
-  match (withdraw_amount <= initial_balance):
-    case True:
-      # Invariant holds: initial_balance - withdraw_amount >= 0
+import ./LAWS.bend as Laws
+
+# ------------------------------------------------------------------------------
+# Helper lemma. This is a proof detail rather than part of the human spec, so it
+# lives here instead of in LAWS.bend.
+# ------------------------------------------------------------------------------
+
+# a - a = 0, by induction: the goal reduces to `0n == 0n` at the base and to
+# `Nat.sub(p, p) == 0n` in the step, which is the induction hypothesis.
+law Nat.sub_self:
+  for a: Nat
+  {Nat.sub(a, a) == 0n : Nat}
+
+def Nat.sub_self(a):
+  match a:
+    case 0n:
       {==}
-    case False:
-      # Invariant holds: withdrawal is rejected, initial_balance >= 0 unchanged
+    case 1n+p:
+      Nat.sub_self(p)
+
+# ------------------------------------------------------------------------------
+# Proofs for the laws in LAWS.bend
+# ------------------------------------------------------------------------------
+
+# Case analysis on `balance`: the goal reduces to `0n == 0n` in the base case and
+# to `1n+bp == 1n+bp` in the step case, so reflexivity closes both.
+def Laws.withdraw_zero_noop(balance):
+  match balance:
+    case 0n:
+      {==}
+    case 1n+bp:
       {==}
 
-def Laws.vault_solvency(deposits, withdrawals):
-  match deposits:
-    case List.nil:
-      # Base case: 0 deposits, solvency holds trivially
+# Case analysis on `balance` exposes `Nat.sub(bp, bp) == 0n` in the step case,
+# which is exactly the helper lemma above.
+def Laws.withdraw_all_empties(balance):
+  match balance:
+    case 0n:
       {==}
-    case List.cons:
-      # Inductive step: total_deposited = head + sum(tail)
-      %Laws.vault_solvency(deposits.tail, withdrawals) : {==}
-
-def Laws.escrow_state_transition(action, state):
-  match state:
-    case EscrowState.Created:
-      match action:
-        case EscrowAction.Lock:
-          # Created -> Locked is valid
-          {==}
-        case EscrowAction.Cancel:
-          # Created -> Refunded is valid
-          {==}
-        case EscrowAction.Release:
-          # Created -> Released is ILLEGAL; transition safely remains Created
-          {==}
-    case EscrowState.Locked:
-      match action:
-        case EscrowAction.Release:
-          # Locked -> Released is valid
-          {==}
-        case EscrowAction.Dispute:
-          # Locked -> Disputed is valid
-          {==}
-        case EscrowAction.Refund:
-          # Locked -> Refunded is valid
-          {==}
-    case EscrowState.Released:
-      # Terminal state: no further mutations permitted
-      {==}
-    case EscrowState.Disputed:
-      # Disputed state: transition to Released or Refunded
-      {==}
-    case EscrowState.Refunded:
-      # Terminal state: refund settled, no further mutations permitted
-      {==}
+    case 1n+bp:
+      Nat.sub_self(bp)

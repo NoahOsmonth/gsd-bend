@@ -24,7 +24,7 @@ FAILURE DIAGNOSTIC:
 - Error Details: ${result.message}
 
 RULES FOR FIXING:
-1. DO NOT touch LAWS.bend (it is cryptographically locked with SHA-256).
+1. DO NOT touch LAWS.bend (it is hash-locked with SHA-256).
 2. DO NOT weaken assertions or delete proof cases.
 3. If an inductive branch is missing (e.g. 'case False'), you MUST implement:
    - Boundary checks in your code logic (e.g., if withdraw_amount > initial_balance).

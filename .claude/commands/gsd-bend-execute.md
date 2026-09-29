@@ -16,7 +16,7 @@ gsd-bend execute
 2. **Scaffolds / Validates `PROOF.bend`**: Ensures proof stubs exist for all declared laws.
 3. **Enforces AI Agent Directives**:
    - Write real business logic in source code files.
-   - Supply exhaustive inductive proof branches covering 100% of inputs in `PROOF.bend`.
+   - Supply a proof for every law in `PROOF.bend`: base cases, inductive steps, and lemma calls.
    - Never inject mocking frameworks (`jest.mock`, `vi.mock`, fake return shortcuts).
    - Never bypass induction with unproven axioms (`axiom bypass:`).
 4. **Prepares Verify Gate**: Sets GSD phase to `execute` (`in_progress`).

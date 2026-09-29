@@ -1,0 +1,10 @@
+node_modules/
+*.log
+
+# Output of `gsd-bend install-skill` for this repo itself. The canonical source is
+# skills/gsd-bend/, so a committed copy here is just a duplicate that drifts.
+.agents/skills/
+
+# Working state for the repo itself (examples/ ship their own, deliberately).
+/.planning/
+/.scratch/

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { GSDPhaseBridge } from '../src/gsd/phase-bridge.js';
+import { TEMPLATE_LAW_NAMES } from '../src/core/templates.js';
 import { runNewProject } from '../src/cli/new-project.js';
 import { runMapCodebase } from '../src/cli/map-codebase.js';
 import { runDiscuss } from '../src/cli/discuss.js';
@@ -42,12 +43,12 @@ describe('GSD Phase Bridge & Full Lifecycle', () => {
     const planRes = runPlan({ projectRoot: tmpDir });
     assert.strictEqual(planRes.success, true);
     assert.strictEqual(fs.existsSync(path.join(tmpDir, '.planning', 'PLAN.md')), true);
-    assert.strictEqual(planRes.lockData.laws.includes('wallet_never_negative'), true);
+    assert.strictEqual(planRes.lockData.laws.includes(TEMPLATE_LAW_NAMES[0]), true);
 
     // 5. Execute - Check law integrity
     const execRes = runExecute({ projectRoot: tmpDir });
     assert.strictEqual(execRes.success, true);
-    assert.strictEqual(execRes.activeLaws.includes('wallet_never_negative'), true);
+    assert.strictEqual(execRes.activeLaws.includes(TEMPLATE_LAW_NAMES[0]), true);
 
     // Verify ship is blocked BEFORE verify
     const shipBlocked = runShip({ projectRoot: tmpDir });

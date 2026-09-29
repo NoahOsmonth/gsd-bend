@@ -26,4 +26,4 @@ gsd-bend next --auto
 - **execute** -> Advances to `/gsd-bend:verify` to run the formal proof gate
 - **verify** (passed) -> Advances to `/gsd-bend:ship` to seal release
 - **verify** (failed) -> Triggers `/gsd-bend:heal` to inspect counterexamples
-- **ship** -> Reports project complete and 100% mathematically proven!
+- **ship** -> Reports the project complete and every law discharged.

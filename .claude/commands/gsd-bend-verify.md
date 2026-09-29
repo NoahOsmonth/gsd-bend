@@ -15,5 +15,5 @@ gsd-bend verify
 1. Checks law integrity against `.planning/laws.lock`.
 2. Audits for anti-Goodhart cheating (mock injection, axiomatic bypasses).
 3. Executes the Bend 2 proof checker (native compiler or built-in engine).
-4. Issues a signed `.planning/PROOF_ATTESTATION.json` upon 100% domain proof.
+4. Issues `.planning/PROOF_ATTESTATION.json` recording the engine, the coverage, and whether it was signed.
 5. Unblocks the GSD phase advancement gate to allow transition to `Ship`.

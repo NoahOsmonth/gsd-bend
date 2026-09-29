@@ -141,7 +141,7 @@ export function main(args = process.argv.slice(2)) {
 gsd-bend: Formal Verification Skill & Engine for GSD Core
 
 Full GSD Lifecycle Commands:
-  new-project [name]  Scaffold a new formally verified GSD project
+  new-project [name]  Scaffold a new GSD project with a locked law spec
   map-codebase        Analyze codebase architecture and locate invariant targets
   discuss [topic]     Capture domain requirements and define safety invariants
   plan                Formulate phase plan, lock LAWS.bend with SHA-256 in laws.lock

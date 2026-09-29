@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "currentPhase": "verify",
+  "status": "passed",
+  "updatedAt": "2026-09-29T11:21:07.366Z",
+  "attestationPath": "/home/sigmund/Desktop/gsd-bend/examples/bend-vault/.planning/PROOF_ATTESTATION.json",
+  "attestationSignature": "bd4857e2b6d1a6d2fe4b45a51192334c422acaf2c5a1ca252826238a200b78d7",
+  "verifiedLaws": [
+    "withdraw_zero_noop",
+    "withdraw_all_empties"
+  ]
+}

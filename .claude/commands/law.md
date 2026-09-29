@@ -1,6 +1,6 @@
 # /gsd-bend:law or /gsd-bend-law
 
-Manage, inspect, and cryptographically lock mathematical laws in `LAWS.bend`.
+Manage, inspect, and hash-lock the laws in `LAWS.bend`.
 
 ## Usage
 ```bash

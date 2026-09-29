@@ -1,25 +1,33 @@
 # ==============================================================================
-# LAWS.bend - BendVault Mathematical Invariants
+# LAWS.bend - THE SPECIFICATION (BendVault example)
 # ==============================================================================
-# Invariants formally defined during GSD Plan Phase. Locked by SHA-256.
+# A human writes this file. The agent must not edit it: `gsd-bend plan` locks it
+# with SHA-256 and `gsd-bend verify` fails if it changed afterwards.
+#
+# Each law is an open claim: a fact that must hold for EVERY input, not just the
+# ones a unit test happens to try. The agent fills each law with a proof in
+# PROOF.bend, and `bend PROOF.bend` is the gate.
+#
+# Verify this example end to end with:
+#   bend PROOF.bend              # prints ALL PROOFS CHECK, or SOME PROOFS FAIL
+#   gsd-bend verify              # runs the gate and writes the attestation
 
-law wallet_never_negative:
-  for initial_balance: U32
-  for withdraw_amount: U32
-  final_balance = Wallet.withdraw(initial_balance, withdraw_amount)
-  { (final_balance >= 0) == True : Bool }
+import Base
+import ./src/wallet.bend as Wallet
 
-law vault_solvency:
-  for deposits: List<U32>
-  for withdrawals: List<U32>
-  total_deposited = List.sum(deposits)
-  total_withdrawn = List.sum(withdrawals)
-  valid = (total_withdrawn <= total_deposited)
-  vault_balance = Vault.process(deposits, withdrawals)
-  { (valid == True) -> (vault_balance == (total_deposited - total_withdrawn)) : Bool }
+# Withdrawing nothing changes nothing.
+law withdraw_zero_noop:
+  for balance: Nat
+  {Wallet.withdraw(balance, 0n) == balance : Nat}
 
-law escrow_state_transition:
-  for action: EscrowAction
-  for state: EscrowState
-  next_state = Escrow.transition(state, action)
-  { Escrow.is_valid_transition(state, next_state) == True : Bool }
+# Withdrawing the entire balance empties it exactly - no dust, no underflow.
+#
+# This is the law that a `balance >= 0` invariant only pretends to state. Over
+# `Nat` that weaker claim is true by type; over `U32` it is true because
+# subtraction wraps (`0 - 1 : U32` is 4294967295). Either way it says nothing
+# about whether the withdrawal was refused. This law is falsifiable: change the
+# implementation to return `1n+Nat.sub(bp, ap)` and `bend PROOF.bend` reports
+# SOME PROOFS FAIL with the expected and observed terms.
+law withdraw_all_empties:
+  for balance: Nat
+  {Wallet.withdraw(balance, balance) == 0n : Nat}

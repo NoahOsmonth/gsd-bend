@@ -1,6 +1,6 @@
 # /gsd-bend:ship or /gsd-bend-ship
 
-Evaluate the cryptographic proof gate, seal the phase release, and allow deployment only if 100% mathematical verification passed.
+Evaluate the proof gate, seal the phase release, and allow deployment only if every law was discharged.
 
 ## Usage
 ```bash
@@ -13,10 +13,10 @@ gsd-bend ship
 
 ## What it does
 1. **Evaluates Proof Attestation Gate**: Verifies `.planning/PROOF_ATTESTATION.json` for:
-   - Valid cryptographic signature.
-   - 100% domain proof coverage.
+   - An untampered attestation (`signed` reports whether a key was configured).
+   - Compiler-checked coverage (`ALL_INPUTS_CHECKED_BY_BEND`), or `SAMPLED_*` when no Bend compiler was available.
    - Clean anti-Goodhart security audit.
    - Untampered law & proof hashes.
 2. **Hard Gate Enforcement**: If unverified, tampered, or missing, advancement to ship is strictly blocked (`GATE_BLOCKED`).
-3. **Generates Release Summary**: Creates `.planning/SHIP_SUMMARY.md` documenting verified invariants and cryptographic attestation token.
+3. **Generates Release Summary**: Creates `.planning/SHIP_SUMMARY.md` documenting the verified laws and the attestation token.
 4. **Lifecycle Completion**: Sets GSD state to `ship` (`completed`).

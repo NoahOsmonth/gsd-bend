@@ -5,6 +5,7 @@ import { Attestation } from '../core/attestation.js';
 import { LawLock } from '../core/law-lock.js';
 import { LawParser } from '../prover/law-parser.js';
 import { Verifier } from '../core/verifier.js';
+import { LAWS_TEMPLATE, PROOF_TEMPLATE } from '../core/templates.js';
 
 export class GSDPhaseBridge {
   /**
@@ -82,7 +83,7 @@ ${metadata.activeLaws && metadata.activeLaws.length > 0 ? `### Active Invariants
   }
 
   /**
-   * Scaffolds a new project with GSD state, laws, proof template, and cryptographic lock.
+   * Scaffolds a new project with GSD state, a locked law spec, and a proof template.
    * @param {string} projectRoot
    * @param {string} projectName
    * @param {object} options
@@ -99,37 +100,11 @@ ${metadata.activeLaws && metadata.activeLaws.length > 0 ? `### Active Invariants
     const lockPath = path.join(planningDir, 'laws.lock');
 
     if (!fs.existsSync(lawsPath)) {
-      const defaultLaws = `# ==============================================================================
-# LAWS.bend - GSD Mathematical Specification & Invariants
-# ==============================================================================
-# Locked by GSD-Bend. AI agents CANNOT modify this file during Execute phase.
-# The compiler verifies that the implementation satisfies these laws for ALL inputs.
-
-law wallet_never_negative:
-  for initial_balance: U32
-  for withdraw_amount: U32
-  final_balance = Wallet.withdraw(initial_balance, withdraw_amount)
-  { (final_balance >= 0) == True : Bool }
-`;
-      fs.writeFileSync(lawsPath, defaultLaws, 'utf8');
+      fs.writeFileSync(lawsPath, LAWS_TEMPLATE, 'utf8');
     }
 
     if (!fs.existsSync(proofPath)) {
-      const defaultProof = `# ==============================================================================
-# PROOF.bend - Formal Mathematical Proofs
-# ==============================================================================
-# The AI agent must provide inductive proof branches for every law in LAWS.bend.
-
-def Laws.wallet_never_negative(initial_balance, withdraw_amount):
-  match (withdraw_amount <= initial_balance):
-    case True:
-      # If withdraw_amount <= initial_balance, initial_balance - withdraw_amount >= 0
-      {==}
-    case False:
-      # If withdraw_amount > initial_balance, withdraw is rejected, initial_balance unchanged >= 0
-      {==}
-`;
-      fs.writeFileSync(proofPath, defaultProof, 'utf8');
+      fs.writeFileSync(proofPath, PROOF_TEMPLATE, 'utf8');
     }
 
     const lockData = LawLock.lock(lawsPath, lockPath, {
@@ -310,7 +285,7 @@ ${laws.map(l => `- **${l.name}**: \`${l.invariant ? l.invariant.expression : 'un
 
 ## Agent Constraints
 - \`LAWS.bend\` is locked and immutable.
-- Proofs must cover 100% of the input domain without fallback axioms.
+- Proofs must discharge every law in LAWS.bend, without fallback axioms.
 `;
     fs.writeFileSync(planPath, planContent, 'utf8');
 
@@ -421,6 +396,18 @@ ${laws.map(l => `- **${l.name}**: \`${l.invariant ? l.invariant.expression : 'un
       };
     }
 
+    // A certificate that is not cryptographically signed proves integrity, not
+    // provenance. Opt in to requiring a real signature with
+    // GSD_BEND_REQUIRE_SIGNATURE=1 (and GSD_BEND_ATTESTATION_KEY set).
+    if (process.env.GSD_BEND_REQUIRE_SIGNATURE === '1' && !validation.signed) {
+      return {
+        canAdvance: false,
+        reason:
+          `GATE BLOCKED: GSD_BEND_REQUIRE_SIGNATURE=1 but the attestation is ${validation.signatureKind} ` +
+          `(no key configured). Set GSD_BEND_ATTESTATION_KEY and re-run \`gsd-bend verify\`.`
+      };
+    }
+
     // Verify law lock integrity before allowing ship
     const lawsPath = path.join(projectRoot, 'LAWS.bend');
     const lockPath = path.join(projectRoot, '.planning', 'laws.lock');
@@ -455,6 +442,8 @@ ${laws.map(l => `- **${l.name}**: \`${l.invariant ? l.invariant.expression : 'un
 
     return {
       canAdvance: true,
+      signed: validation.signed === true,
+      signatureKind: validation.signatureKind,
       attestation: validation.attestation
     };
   }
@@ -478,9 +467,24 @@ ${laws.map(l => `- **${l.name}**: \`${l.invariant ? l.invariant.expression : 'un
     const planningDir = path.join(projectRoot, '.planning');
     const shipSummaryPath = path.join(planningDir, 'SHIP_SUMMARY.md');
     const attestation = gateCheck.attestation;
+    const signed = gateCheck.signed === true;
+
+    // Say exactly what was verified. A sampled run is not a proof, and an
+    // unkeyed checksum is not a signature.
+    const engineLabel = attestation.engine === 'bend'
+      ? 'the Bend compiler (proofs checked by Bend)'
+      : `the built-in evaluator (${attestation.engine}) — SAMPLE-BASED, not a proof`;
+    const provenance = signed
+      ? `HMAC-SHA256 (\`${attestation.attestationSignature}\`)`
+      : `unkeyed SHA-256 checksum (\`${attestation.attestationSignature}\`) — integrity only, NOT signed`;
+    const gateLine = attestation.engine === 'bend' && attestation.status === 'KERNEL_VERIFIED'
+      ? '**VERIFICATION GATE: CLEARED** — all laws kernel-checked by Bend for all inputs.'
+      : attestation.engine === 'bend'
+        ? '**VERIFICATION GATE: CLEARED (compiler-checked)** — Bend reported ALL PROOFS CHECK for these laws.'
+        : '**VERIFICATION GATE: PASSED WITH LIMITED COVERAGE** — no counterexample was found in the sampled domain. This is a tripwire, not a proof. Install the Bend compiler and write real Bend proofs to upgrade this to a proof.';
 
     const shipMd = `# GSD Ship Certificate & Release Summary
-Formally Verified with Bend 2 & GSD Core at ${new Date().toISOString()}
+Proof Gate run at ${new Date().toISOString()}
 
 ## Formal Proof Attestation
 - **Status:** \`${attestation.status}\`
@@ -488,18 +492,20 @@ Formally Verified with Bend 2 & GSD Core at ${new Date().toISOString()}
 - **Engine:** \`${attestation.engine}\`
 - **Law Hash (SHA-256):** \`${attestation.lawHash}\`
 - **Proof Hash (SHA-256):** \`${attestation.proofHash}\`
-- **Cryptographic Signature:** \`${attestation.attestationSignature}\`
+- **Attestation Integrity:** ${provenance}
 
-## Formally Proven Invariants
-${attestation.verifiedLaws.map(law => `- [x] \`${law}\``).join('\n')}
+## Laws That Passed The Gate
+${(attestation.verifiedLaws || []).map(law => `- [x] \`${law}\``).join('\n')}
 
-## Security & Anti-Cheat Summary
-- Anti-Goodhart Cheating Audit: \`${attestation.antiGoodhartAudit}\`
-- Axiomatic shortcuts bypassed: 0
-- Unit test mocks injected: 0
-- Invariant domain coverage: 100%
+## Verification Scope (read before trusting this certificate)
+- Verified by: ${engineLabel}
+- Coverage: ${attestation.coverage}
+- Anti-Goodhart cheating audit: \`${attestation.antiGoodhartAudit}\` (checks for mocks, \`any\` escapes, and spec edits)
+- Law spec locked by SHA-256: the spec cannot be edited to match the code after the fact
+- Limitations: see the "Verification limits" section of the README. A sample-based pass is
+  not a proof and this certificate does not claim one.
 
-🚀 **VERIFICATION GATE: CLEARED.** Safe for production deployment.
+${gateLine}
 `;
     fs.writeFileSync(shipSummaryPath, shipMd, 'utf8');
 
@@ -638,7 +644,7 @@ ${attestation.verifiedLaws.map(law => `- [x] \`${law}\``).join('\n')}
         commandToRun = 'gsd-bend execute';
         break;
       case 'verify':
-        actionRecommendation = 'Run the formal verification gate and anti-cheat audit to verify 100% of domain inputs and sign PROOF_ATTESTATION.json.';
+        actionRecommendation = 'Run the proof gate and anti-cheat audit, then issue PROOF_ATTESTATION.json.';
         commandToRun = 'gsd-bend verify';
         break;
       case 'heal':
@@ -650,7 +656,7 @@ ${attestation.verifiedLaws.map(law => `- [x] \`${law}\``).join('\n')}
         commandToRun = 'gsd-bend ship';
         break;
       case 'done':
-        actionRecommendation = 'Lifecycle complete. Project is 100% mathematically proven and shipped.';
+        actionRecommendation = 'Lifecycle complete. Every law in LAWS.bend was discharged and the project shipped.';
         commandToRun = 'gsd-bend status';
         break;
       default:

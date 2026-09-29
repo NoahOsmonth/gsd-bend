@@ -1,6 +1,6 @@
 # /gsd-bend:plan or /gsd-bend-plan
 
-Formulate the execution plan, define mathematical invariants in `LAWS.bend`, cryptographically lock them with SHA-256 into `.planning/laws.lock`, and break down verification tasks.
+Formulate the execution plan, define mathematical invariants in `LAWS.bend`, lock them with a canonical SHA-256 hash into `.planning/laws.lock`, and break down verification tasks.
 
 ## Usage
 ```bash

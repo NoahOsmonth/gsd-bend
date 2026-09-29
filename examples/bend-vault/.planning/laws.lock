@@ -1,14 +1,14 @@
 {
   "version": "1.0.0",
-  "lockedAt": "2026-09-29T05:49:10.011Z",
+  "lockedAt": "2026-09-29T11:21:06.878Z",
   "lawsFile": "LAWS.bend",
-  "canonicalSha256": "472d539c852bb387b91c6f2b1917c07f5ba64a4ff5ee19fc8f9e0d04d561c57e",
-  "lawCount": 3,
+  "canonicalSha256": "ac78e7d5123a3c5ee3163682ceba9ab046f2ca393d5334a03447b6735d20eb88",
+  "sha256": "ac78e7d5123a3c5ee3163682ceba9ab046f2ca393d5334a03447b6735d20eb88",
+  "lawCount": 2,
   "laws": [
-    "wallet_never_negative",
-    "vault_solvency",
-    "escrow_state_transition"
+    "withdraw_zero_noop",
+    "withdraw_all_empties"
   ],
-  "lockedBy": "Lead Architect",
-  "description": "BendVault Solvency & Escrow Invariant Lock"
+  "lockedBy": "gsd-architect",
+  "description": "GSD Plan Phase Invariant Lock"
 }

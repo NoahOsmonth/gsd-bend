@@ -17,6 +17,7 @@ export class Verifier {
    * @param {string} [options.attestationFile] - Output path for PROOF_ATTESTATION.json
    * @param {string} [options.phase] - Current GSD phase name
    * @param {boolean} [options.strictLock] - Whether to require law lock
+   * @param {'auto'|'bend'|'builtin'} [options.engine] - Force a verification engine
    * @param {object} [options.implementationEnv] - Optional function evaluation map
    * @returns {{ success: boolean, step: string, message: string, attestation?: object, diagnostics?: object[] }}
    */
@@ -121,7 +122,9 @@ export class Verifier {
     }
 
     // 5. Run Proof Verification (Native compiler or built-in engine)
-    const proofResult = BendRunner.runProof(proofPath, lawsPath, implementationEnv);
+    const proofResult = BendRunner.runProof(proofPath, lawsPath, implementationEnv, {
+      engine: options.engine
+    });
     if (!proofResult.success) {
       return {
         success: false,
@@ -141,14 +144,30 @@ export class Verifier {
       lawHash,
       verifiedLaws,
       phase,
-      outputPath: attestationPath
+      outputPath: attestationPath,
+      // State what the runner actually did. Never a blanket "MATHEMATICALLY_PROVEN":
+      // the sampled evaluator checks a handful of values per parameter.
+      status: proofResult.status || 'UNVERIFIED',
+      coverage: proofResult.coverage || 'UNKNOWN',
+      engine: proofResult.engine || 'unknown',
+      runner: proofResult.runner || 'unknown'
     });
+
+    const provenance = attestation.signed
+      ? `signed (${attestation.signatureKind})`
+      : `UNSIGNED (${attestation.signatureKind} — set GSD_BEND_ATTESTATION_KEY to sign)`;
 
     return {
       success: true,
       step: 'VERIFICATION_COMPLETE',
-      message: `Formally verified ${verifiedLaws.length} invariant laws! Proof attestation generated.`,
+      message:
+        `${verifiedLaws.length} invariant law(s) passed ${proofResult.engine} verification ` +
+        `[${proofResult.status} / ${proofResult.coverage}]. ` +
+        `Attestation ${provenance}.`,
       runner: proofResult.runner,
+      engine: proofResult.engine,
+      status: proofResult.status,
+      coverage: proofResult.coverage,
       attestation,
       attestationPath,
       verifiedLaws
