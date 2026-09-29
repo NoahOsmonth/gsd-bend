@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "lockedAt": "2026-09-29T05:49:10.011Z",
+  "lawsFile": "LAWS.bend",
+  "canonicalSha256": "472d539c852bb387b91c6f2b1917c07f5ba64a4ff5ee19fc8f9e0d04d561c57e",
+  "lawCount": 3,
+  "laws": [
+    "wallet_never_negative",
+    "vault_solvency",
+    "escrow_state_transition"
+  ],
+  "lockedBy": "Lead Architect",
+  "description": "BendVault Solvency & Escrow Invariant Lock"
+}

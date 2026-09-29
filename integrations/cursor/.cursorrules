@@ -1,0 +1,19 @@
+# Cursor Rules: Bend Formal Proof Verification
+# Place this file as .cursorrules at the root of your project
+
+## Behavioral Directives for AI Coding Agent:
+1. FORMAL VERIFICATION ENFORCEMENT:
+   - When writing sensitive business logic (balances, state machines, permissions, invariants), check if `LAWS.bend` exists.
+   - You MUST NOT fake tests or rely solely on unit tests.
+   - You MUST write the corresponding formal proof in `PROOF.bend`.
+
+2. UNBREAKABLE RULES:
+   - NEVER alter `LAWS.bend`. The file is cryptographically locked with SHA-256 (`.planning/laws.lock`).
+   - NEVER use mocking libraries (`jest.mock`, `vi.mock`, `sinon`) or unproven axioms (`axiom ...`) to force a pass.
+   - Always verify your work before reporting completion by running:
+     `npx gsd-bend verify` or `node bin/gsd-bend.js verify`
+
+3. PROOF GUIDELINES:
+   - Every conditional branch must be proved (`case True:`, `case False:`).
+   - Inductive types like lists require both base cases (`case List.nil:`) and inductive steps (`case List.cons:`).
+   - If verification returns a counterexample (e.g. `{"initial_balance": 10, "withdraw_amount": 50}`), fix the underlying code implementation, do NOT weaken the invariant.

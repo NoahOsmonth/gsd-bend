@@ -1,0 +1,26 @@
+{
+  "name": "gsd-bend",
+  "version": "1.0.0",
+  "description": "GSD Core Skill & Proof Verification Engine using Bend 2 Formal Verification to block AI mistakes",
+  "main": "src/index.js",
+  "bin": {
+    "gsd-bend": "./bin/gsd-bend.js"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js",
+    "demo": "node examples/bend-vault/verify-demo.js"
+  },
+  "keywords": [
+    "gsd",
+    "gsd-core",
+    "bend",
+    "bendlang",
+    "formal-verification",
+    "ai-agents",
+    "proof-verification",
+    "goodhart-prevention"
+  ],
+  "author": "open-gsd & bendlang community",
+  "license": "MIT"
+}
