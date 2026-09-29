@@ -39,7 +39,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'gsd_bend_new_project',
-        description: 'Scaffolds a new formally verified GSD project with .planning/, LAWS.bend, PROOF.bend, and SHA-256 lock.',
+        description: 'Scaffolds a new GSD project with a locked law spec and a provable scaffold, including .planning/, LAWS.bend, PROOF.bend, and SHA-256 lock.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -105,7 +105,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'gsd_bend_ship',
-        description: 'Enforces formal proof ship gate, writes SHIP_SUMMARY.md, and seals release upon 100% mathematical verification.',
+        description: 'Enforces the proof ship gate, writes SHIP_SUMMARY.md, and seals the release once every law is discharged.',
         inputSchema: {
           type: 'object',
           properties: {

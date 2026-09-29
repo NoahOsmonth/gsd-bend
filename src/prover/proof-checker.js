@@ -3,6 +3,60 @@ import { Evaluator } from './evaluator.js';
 
 export class ProofChecker {
   /**
+   * Roots that Base/Bend provide, so a law referring to them needs no local
+   * binding. Anything else the law calls must exist in implementationEnv.
+   */
+  static BUILTIN_ROOTS = new Set([
+    'List', 'U32', 'Nat', 'Int', 'Bool', 'String', 'Char', 'F32', 'Unit',
+    'Cmp', 'Maybe', 'Result', 'Array', 'IO', 'Equal', 'Base',
+    'EscrowState', 'EscrowAction'
+  ]);
+
+  /**
+   * Root namespace objects a law actually calls, e.g. `Wallet.withdraw(...)`
+   * yields 'Wallet'. Builtins and the law's own parameters are excluded.
+   * @param {object} law - Parsed law from LawParser
+   * @returns {string[]} Root names that must be bound in implementationEnv
+   */
+  static requiredRoots(law) {
+    const sources = [
+      ...(law.statements || []),
+      law.invariant ? law.invariant.expression : ''
+    ];
+    const paramNames = new Set((law.params || []).map(p => p.name));
+    const roots = new Set();
+
+    for (const src of sources) {
+      if (!src) continue;
+      // `Root.member(` — a call through a namespace object.
+      const callRe = /\b([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+      let m;
+      while ((m = callRe.exec(src)) !== null) {
+        const root = m[1];
+        if (!this.BUILTIN_ROOTS.has(root) && !paramNames.has(root)) {
+          roots.add(root);
+        }
+      }
+    }
+    return [...roots];
+  }
+
+  /**
+   * Roots a law requires that are absent from the implementation environment.
+   * A non-empty result means the law's implementation was never executed.
+   * @param {object} law
+   * @param {object} implementationEnv
+   * @returns {string[]}
+   */
+  static missingBindings(law, implementationEnv = {}) {
+    // A law with no namespace call needs no implementation binding: it is a
+    // pure arithmetic claim evaluated directly.
+    return this.requiredRoots(law).filter(
+      root => implementationEnv == null || implementationEnv[root] == null
+    );
+  }
+
+  /**
    * Parses PROOF.bend file content into structured proof definitions.
    * @param {string} content
    * @returns {Map<string, object>} Map of lawName -> proof AST
@@ -228,6 +282,28 @@ export class ProofChecker {
       }
       if (enumBranchError) {
         errors.push(enumBranchError);
+        continue;
+      }
+
+      // --- Soundness: every symbol the law calls must actually be bound. ---
+      // A law whose implementation never loaded cannot be verified. Previously
+      // an empty implementationEnv skipped the semantic check below entirely
+      // and the law was still appended to verifiedLaws, so a TypeScript project
+      // (where nothing is require()-able) got a green gate with the code never
+      // executed. Fail loudly instead.
+      const missing = this.missingBindings(law, implementationEnv);
+      if (missing.length > 0) {
+        errors.push(
+          `Unbound implementation for '${law.name}': the law calls ${missing.join(', ')}, ` +
+          `but no such binding was loaded from src/. The implementation was never executed, ` +
+          `so this law is NOT verified. Export a namespace object of that name from a ` +
+          `top-level src/*.js|.mjs|.cjs file (a thin JS shim works for a TS project).`
+        );
+        diagnostics.push({
+          law: law.name,
+          status: 'UNBOUND_IMPLEMENTATION',
+          missing
+        });
         continue;
       }
 

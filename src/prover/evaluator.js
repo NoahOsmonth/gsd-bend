@@ -3,6 +3,35 @@
  */
 export class Evaluator {
   /**
+   * The sampled domain per parameter type. These values are a TRIPWIRE, not a
+   * proof: a bug at any value outside this set is invisible to the evaluator.
+   * Callers must report results as sampled, never as "100% of the domain".
+   *
+   * Override with GSD_BEND_SAMPLES (comma-separated integers) to widen the
+   * search, e.g. GSD_BEND_SAMPLES=0,1,2,100,101,4294967295.
+   */
+  static numericSamples() {
+    const raw = process.env.GSD_BEND_SAMPLES;
+    if (raw) {
+      const parsed = raw
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(Number)
+        .filter(n => Number.isFinite(n));
+      if (parsed.length > 0) {
+        return parsed;
+      }
+    }
+    return [0, 1, 10, 50, 100];
+  }
+
+  /** Number of values sampled per parameter, for honest reporting. */
+  static sampleSize() {
+    return this.numericSamples().length;
+  }
+
+  /**
    * Normalizes Bend expressions into valid JavaScript expressions.
    * @param {string} expr
    * @returns {string}
@@ -14,6 +43,10 @@ export class Evaluator {
     clean = clean
       .replace(/\bTrue\b/g, 'true')
       .replace(/\bFalse\b/g, 'false');
+
+    // Nat literals are written `0n`, `1n` in Bend; the JS bridge uses Numbers.
+    // `1n+p` (Bend's successor sugar) becomes `1+p`, which is the same meaning.
+    clean = clean.replace(/\b(\d+)n\b/g, '$1');
 
     // Replace Bend logical operators
     clean = clean
@@ -44,6 +77,35 @@ export class Evaluator {
         len: (arr) => (Array.isArray(arr) ? arr.length : 0),
         head: (arr) => (Array.isArray(arr) && arr.length > 0 ? arr[0] : 0),
         tail: (arr) => (Array.isArray(arr) ? arr.slice(1) : [])
+      };
+    }
+
+    // Bend's numeric builtins, so a law written against Base can still be
+    // sampled on a machine with no Bend compiler installed.
+    if (!scope.Nat) {
+      scope.Nat = {
+        // Nat.sub saturates at zero: `case 0n _: 0n`.
+        sub: (a, b) => Math.max(0, Number(a) - Number(b)),
+        add: (a, b) => Number(a) + Number(b),
+        mul: (a, b) => Number(a) * Number(b),
+        is_le: (a, b) => Number(a) <= Number(b),
+        is_ge: (a, b) => Number(a) >= Number(b),
+        is_lt: (a, b) => Number(a) < Number(b),
+        is_gt: (a, b) => Number(a) > Number(b)
+      };
+    }
+
+    if (!scope.U32) {
+      scope.U32 = {
+        // U32 arithmetic WRAPS. `0 - 1 : U32` is 4294967295, which is why a
+        // `balance >= 0` law over U32 is vacuously true and proves nothing.
+        sub: (a, b) => (Number(a) - Number(b)) >>> 0,
+        add: (a, b) => (Number(a) + Number(b)) >>> 0,
+        mul: (a, b) => Math.imul(Number(a), Number(b)) >>> 0,
+        is_le: (a, b) => Number(a) <= Number(b),
+        is_ge: (a, b) => Number(a) >= Number(b),
+        is_lt: (a, b) => Number(a) < Number(b),
+        is_gt: (a, b) => Number(a) > Number(b)
       };
     }
 
@@ -174,10 +236,10 @@ export class Evaluator {
 
       // Numbers (U32, Nat, Int)
       if (type.includes('U32') || type.includes('Nat') || type.includes('Int')) {
-        return [0, 1, 10, 50, 100];
+        return this.numericSamples();
       }
 
-      return [0, 10, 50];
+      return this.numericSamples();
     });
 
     // Cartesian product of parameter samples

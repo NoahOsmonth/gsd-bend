@@ -15,7 +15,18 @@ export function runVerify(options = {}) {
     console.log(`Attestation File: ${result.attestationPath}`);
     console.log(`Status:           ${result.attestation.status}`);
     console.log(`Coverage:         ${result.attestation.coverage}`);
-    console.log(`Signature:        ${result.attestation.attestationSignature.slice(0, 16)}...`);
+    console.log(
+      `Attestation:      ${result.attestation.signed
+        ? `HMAC-SHA256 signed (${result.attestation.attestationSignature.slice(0, 16)}...)`
+        : `UNSIGNED checksum ${result.attestation.attestationSignature.slice(0, 16)}... - integrity only`}`
+    );
+    if (!result.attestation.signed) {
+      console.log('                  Set GSD_BEND_ATTESTATION_KEY to sign this certificate.');
+    }
+    if (result.engine !== 'bend') {
+      console.log('NOTE: the built-in evaluator samples a small domain and does NOT prove the');
+      console.log('      laws for all inputs. Install Bend (https://bend-lang.com/) for real proofs.');
+    }
     console.log('----------------------------------------------------------------');
     console.log('🚀 Phase verification complete! Ready to advance to GSD Ship.\n');
     return { success: true, result };

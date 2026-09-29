@@ -10,8 +10,8 @@ When implementing critical logic (data transformations, balance tracking, auth, 
    - `gsd-bend discuss`: Confirm boundaries with the architect.
    - `gsd-bend plan`: Lock `LAWS.bend` invariants into `.planning/laws.lock`.
    - `gsd-bend execute`: Write code & inductive proofs in `PROOF.bend`.
-   - `gsd-bend verify`: Ensure 100% formal proof coverage and anti-cheat audit pass.
-   - `gsd-bend ship`: Advance through cryptographic release gate.
+   - `gsd-bend verify`: Ensure the proof gate and anti-cheat audit pass.
+   - `gsd-bend ship`: Advance through the proof release gate.
 
 2. **Never Edit `LAWS.bend` during Execution**:
    The laws are customer/specification invariants locked via SHA-256 in `.planning/laws.lock`.

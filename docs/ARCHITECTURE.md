@@ -1,4 +1,4 @@
-# GSD-BEND Architecture Plan: Unbreakable AI Verification via Formal Proofs
+# GSD-BEND Architecture: Blocking Agent Goodharting with Bend Proofs
 
 ## 1. Executive Summary
 
@@ -11,19 +11,21 @@ In modern agentic systems, the most fragile failure point is the **Verify** gate
 3. Mock databases, balances, or state machines until the test harness passes.
 4. Delete or skip failing tests during retry thrashing.
 
-**`gsd-bend`** bridges **GSD Core (`open-gsd/gsd-core`)** with **Bend 2 (`bendlang/bend`)**. Instead of relying on easily faked unit test suites, `gsd-bend` replaces or wraps the verify gate with **compiler-enforced mathematical proofs**.
+**`gsd-bend`** bridges **GSD Core (`open-gsd/gsd-core`)** with **Bend 2 (`bendlang/bend`)**. It moves the
+target out of the agent's reach: the human writes and locks the laws *before* the agent writes code,
+and the agent must then produce a proof the Bend compiler accepts.
 
 ---
 
-## 2. Core Concepts: Unit Tests vs. Formal Proofs
+## 2. Core Concepts: Unit Tests vs. Proofs
 
-| Dimension | Standard GSD (Unit Tests) | GSD-Bend (Formal Proofs) |
+| Dimension | Standard GSD (Unit Tests) | GSD-Bend (Bend Proofs) |
 | :--- | :--- | :--- |
-| **Verification Scope** | Samples discrete input points ($N = 3 \text{ to } 10$). | Quantifies over the entire input domain ($\forall x \in \text{Domain}$). |
-| **Agent Cheating Vector** | Mocking dependencies, weakening assertions. | **Impossible**: proof must be inductively sound to compile. |
-| **Specification Medium** | Prose markdown or mutable test files. | Immutable, mathematically locked `LAWS.bend`. |
-| **Gatekeeper** | Test runner exit code ($0$ on passing asserts). | Bend 2 Type/Proof Checker (AST and inductive completeness). |
-| **Ship Gate Output** | Ephemeral test log. | Cryptographic `PROOF_ATTESTATION.json`. |
+| **Verification Scope** | Samples discrete input points ($N = 3 \text{ to } 10$). | Quantifies over the whole domain ($\forall x \in \text{Domain}$) — **when Bend is installed**. Without it, the built-in evaluator samples a handful of values and says so. |
+| **Agent Cheating Vector** | Mocking dependencies, weakening assertions. | The spec is locked by SHA-256 before the code exists, so it cannot be weakened after the fact. A proof cannot be asserted, only given. |
+| **Specification Medium** | Prose markdown or mutable test files. | `LAWS.bend`, hash-locked at Plan time. |
+| **Gatekeeper** | Test runner exit code ($0$ on passing asserts). | `bend PROOF.bend`: `ALL PROOFS CHECK` or `SOME PROOFS FAIL`. |
+| **Ship Gate Output** | Ephemeral test log. | `PROOF_ATTESTATION.json`, recording which engine ran and whether it was signed. |
 
 ---
 
@@ -49,9 +51,9 @@ graph TD
         I -- Tampered --> J[FAIL: LAW_LOCK_VIOLATION]
         I -- Untampered --> K{Anti-Goodhart Static Analysis}
         K -- Cheating / Mock --> L[FAIL: CHEAT_DETECTED]
-        K -- Clean --> M{Bend 2 Proof Compiler}
-        M -- Unproven Branch --> N[FAIL: COUNTEREXAMPLE_FOUND]
-        M -- Valid Proof --> O[Issue PROOF_ATTESTATION.json]
+        K -- Clean --> M{Bend Proof Compiler}
+        M -- Unproven Law --> N[FAIL: PROOFS_FAILED]
+        M -- All Proofs Check --> O[Issue PROOF_ATTESTATION.json]
     end
 
     subgraph GSD State Transition
@@ -67,63 +69,73 @@ graph TD
 
 ### Phase 1: Plan & Law Definition (`/gsd-bend:law`)
 1. During GSD's `Plan` phase, specifications are not left as vague prose requirements in `REQUIREMENTS.md`.
-2. The user or architect defines **Invariants** in `LAWS.bend`:
+2. The user or architect defines **laws** in `LAWS.bend`. A law is an open claim — a type, not a
+   boolean expression — and it must be falsifiable, or proving it buys nothing:
    ```bend
-   law wallet_never_negative:
-     for initial_balance: U32
-     for withdraw_amount: U32
-     final_balance = Wallet.withdraw(initial_balance, withdraw_amount)
-     { (final_balance >= 0) == True : Bool }
+   import Base
+   import ./src/wallet.bend as Wallet
+
+   law withdraw_all_empties:
+     for balance: Nat
+     {Wallet.withdraw(balance, balance) == 0n : Nat}
    ```
 3. Running `gsd-bend law lock` creates `.planning/laws.lock`:
-   - Canonical AST normalization (removes formatting tricks).
-   - SHA-256 hash of invariant statements.
-   - Author signature and timestamp.
-4. The lock is permanently marked read-only for the agent.
+   - Canonical normalization (strips comments and formatting, so cosmetic edits do not change the hash).
+   - SHA-256 hash of the law text.
+   - Author and timestamp.
+4. The lock makes the spec immutable for the agent: any edit is detected at the Execute and Verify gates.
 
 ### Phase 2: Execute (`gsd-bend-execute`)
-1. The AI agent implements the program logic (e.g. `src/vault.bend` or polyglot modules).
+1. The AI agent implements the program logic — in Bend for anything a law talks about, plus whatever
+   polyglot modules the application needs.
 2. The agent is required to supply `PROOF.bend`.
-3. In `PROOF.bend`, the agent must provide inductive proof branches covering the entire domain:
-   - Base cases and inductive steps.
-   - Boolean branch coverage (`True` and `False`).
-   - Algebraic rewrites (`{==}`).
+3. Each law is filled by a `def` of the same name, by case analysis on the law's parameters:
+   base cases, inductive steps, and lemma calls. Bend has no tactics: a proof is a term of the
+   proposition's type.
 
 ### Phase 3: Verify (`/gsd-bend:verify`)
 The GSD verification hook intercepts `/gsd-verify-work` and executes:
-1. **Law Integrity Guard**: Verifies `LAWS.bend` matches `.planning/laws.lock`. Any unauthorized alteration triggers `LAW_LOCK_VIOLATION` and halts the pipeline.
-2. **Anti-Goodhart Static Guard**:
-   - Detects vacuous proofs (`assert True`).
-   - Detects omitted cases (`case _ => ...` without invariant verification).
-   - Detects mock shims attempting to override verified types.
-3. **Bend 2 Proof Verification Engine**:
-   - Executes `bend PROOF.bend`.
-   - Checks that all proof goals evaluate to reflexive equivalence `{==}` across all branches.
-4. **Attestation Generation**:
-   - If verification passes, writes `.planning/phases/current/PROOF_ATTESTATION.json` containing:
-     - `lawHash`: SHA-256 of verified laws.
-     - `proofHash`: SHA-256 of valid proof.
-     - `verifiedLaws`: List of formally verified invariant IDs.
-     - `engine`: Bend 2 Compiler / Proof Engine.
-     - `timestamp`: ISO timestamp.
-     - `signature`: Cryptographic token validating proof completion.
+1. **Law Integrity Guard**: verifies `LAWS.bend` matches `.planning/laws.lock`. Any unauthorized
+   alteration triggers `LAW_LOCK_VIOLATION` and halts the pipeline.
+2. **Anti-Goodhart Static Guard**: flags unproven axioms, mock shims, skipped goals, and `any`-style
+   escapes in the source tree.
+3. **Bend Proof Verification**: runs `bend PROOF.bend` and reads the compiler's verdict and exit
+   code. When no compiler is available it falls back to the built-in evaluator, which samples a
+   small domain and reports `SAMPLED_NO_COUNTEREXAMPLE` — never a proof.
+4. **Attestation Generation**: writes `.planning/PROOF_ATTESTATION.json` containing:
+   - `lawHash` / `proofHash`: SHA-256 of the locked laws and the proof file.
+   - `verifiedLaws`: the law IDs that passed.
+   - `engine`: `bend` or `builtin-sampled`.
+   - `status` / `coverage`: e.g. `PROOFS_CHECKED` / `ALL_INPUTS_CHECKED_BY_BEND`, or
+     `SAMPLED_NO_COUNTEREXAMPLE` / `SAMPLED_5_VALUES_PER_PARAM`.
+   - `signatureKind` / `signed`: `hmac-env-key` + `true` when `GSD_BEND_ATTESTATION_KEY` is set,
+     otherwise `unkeyed-checksum` + `false`. An unkeyed checksum detects edits; it does not
+     establish provenance.
+   - `timestamp`: ISO timestamp.
 
 ### Phase 4: Self-Healing & Reflection (`gsd-bend heal`)
 If the proof fails, `gsd-bend` parses the compiler error and emits a structured reflection prompt for the agent:
-- Identifies the unproven branch (e.g., `when withdraw_amount > initial_balance`).
-- Shows the counterexample state where the invariant collapses.
-- Suggests formal proof strategies (e.g. branch match on condition, lemma substitution).
-- **Prevents Agent From Weakening Laws**: Rejects any agent edit to `LAWS.bend`.
+- Identifies the law that could not be discharged.
+- Shows the compiler's `expected` and `observed` terms — the terms it failed to unify.
+- Suggests proof strategies (case analysis on a parameter, an induction hypothesis, a helper lemma).
+- **Prevents the agent from weakening the laws**: any edit to `LAWS.bend` fails the lock check.
 
 ---
 
-## 5. Polyglot Architecture: Polyglot System with Bend Core
+## 5. Polyglot Architecture: A Verified Core
 
 Real-world applications are rarely written in a single language. `gsd-bend` supports a **Verified Micro-Core Architecture**:
-1. **The Critical Kernel** (e.g., wallet balances, smart contract escrows, state transition safety, permission logic) is written and formally proven in Bend 2.
-2. **The Outer Application Layer** (TypeScript, Node.js, Python, or Rust) imports the verified kernel via:
-   - High-performance C/Wasm bindings compiled from Bend.
-   - Transpiled verified deterministic modules.
-   - Dual-mode execution (Node.js verified runtime + Bend proof attestation).
+1. **The Critical Kernel** (wallet balances, escrow transitions, permission logic) is written and
+   proven in Bend, so the laws can actually be discharged by the compiler.
+2. **The Outer Application Layer** (TypeScript, Node.js, Python, Rust) is where the rest of the
+   application lives.
 
-This allows developers to build entire web applications, APIs, or smart contracts in TypeScript/Python while guaranteeing with mathematical certainty that the core business invariants cannot be broken by an AI agent.
+**The boundary is the honest part of this design.** Bend verifies the kernel; it does not verify the
+outer layer. Code on the other side of the boundary — including `examples/bend-vault/src/vault.js` —
+is outside the proof and needs its own tests. The claim `gsd-bend` supports is:
+
+> The laws in `LAWS.bend` hold for all inputs of the proven kernel, and the spec those laws came from
+> was fixed before the agent started writing code.
+
+It is not "the application is proven correct". See the *Verification Limits* section of the README
+and §7 of `docs/GUIDE.md` for the rest.

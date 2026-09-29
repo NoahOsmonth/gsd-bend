@@ -1,9 +1,9 @@
 ---
 name: gsd-bend
-description: Formal verification skill using Bendlang proofs integrated with GSD Core to block AI coding mistakes, bypass Goodhart's law, and mathematically verify invariants across the complete GSD lifecycle before shipping.
+description: Formal verification skill using Bendlang proofs integrated with GSD Core to block AI coding mistakes, bypass Goodhart's law, and verify locked invariants across the complete GSD lifecycle before shipping.
 ---
 
-# GSD-BEND Skill: Full GSD Core Lifecycle with Mathematical Formal Proofs
+# GSD-BEND Skill: Full GSD Core Lifecycle with Bend Proofs
 
 ## Overview
 `gsd-bend` bridges **GSD Core (`open-gsd/gsd-core`)** with **Bend 2 (`bendlang/bend`)**. It provides the complete suite of GSD workflow slash commands and CLI tools, augmented with compiler-verified mathematical proofs so AI agents cannot fake tests, mock out state, or ship vulnerable code.
@@ -27,11 +27,11 @@ Under **Goodhart's Law** (*"When a measure becomes a target, it ceases to be a g
 - They edit test assertions or mock databases (`jest.mock`, `vi.mock`) to fake success.
 - They merge silent vulnerabilities: balance underflows, illegal state transitions, and solvency collapse.
 
-`gsd-bend` upgrades GSD Core phases with **unbreakable mathematical laws**:
+`gsd-bend` upgrades GSD Core phases with **laws the agent cannot edit**: it locks the spec before the code exists.
 1. Human / Spec architect locks invariants in `LAWS.bend` during the **Plan** phase.
 2. The agent is forced to supply exhaustive inductive proofs in `PROOF.bend` during the **Execute** phase.
-3. The compiler mathematically verifies the code for **100% of all possible inputs**.
-4. The GSD **Ship** gate strictly refuses to advance without a valid cryptographic `PROOF_ATTESTATION.json`.
+3. The Bend compiler checks the proofs for **all inputs** (not a sample) whenever it is installed.
+4. The GSD **Ship** gate refuses to advance without a valid, untampered `PROOF_ATTESTATION.json`.
 
 ---
 
@@ -72,11 +72,15 @@ All commands support dual slash syntax (`/gsd-bend:<cmd>` or `/gsd-bend-<cmd>`) 
 - Formulates tasks in `.planning/PLAN.md`.
 - Specifies formal invariants in `LAWS.bend`:
   ```bend
-  law wallet_never_negative:
-    for initial_balance: U32
-    for withdraw_amount: U32
-    final_balance = Wallet.withdraw(initial_balance, withdraw_amount)
-    { (final_balance >= 0) == True : Bool }
+  import Base
+  import ./src/wallet.bend as Wallet
+
+  # Withdrawing the entire balance empties it exactly.
+  # Note: `balance >= 0` would be vacuously true (U32 subtraction wraps), so it
+  # proves nothing. State the behaviour you actually care about.
+  law withdraw_all_empties:
+    for balance: Nat
+    {Wallet.withdraw(balance, balance) == 0n : Nat}
   ```
 - Automatically computes canonical SHA-256 hash and locks `.planning/laws.lock`.
 - Locks laws as immutable for AI agents during the execution phase.
@@ -85,21 +89,20 @@ All commands support dual slash syntax (`/gsd-bend:<cmd>` or `/gsd-bend-<cmd>`) 
 - Checks `LAWS.bend` against `laws.lock`. If tampered with, execution immediately halts.
 - AI subagent implements program logic and writes `PROOF.bend`:
   ```bend
-  def Laws.wallet_never_negative(initial_balance, withdraw_amount):
-    match (withdraw_amount <= initial_balance):
-      case True:
-        # Branch: amount is within balance -> initial_balance - withdraw_amount >= 0
+  # A def with no return type fills the law of the same name.
+  def Laws.withdraw_all_empties(balance):
+    match balance:
+      case 0n:
         {==}
-      case False:
-        # Branch: amount exceeds balance -> withdrawal rejected, balance unchanged >= 0
-        {==}
+      case 1n+bp:
+        Nat.sub_self(bp)
   ```
-- Exhaustive branch coverage is required; shortcuts and mocks are strictly rejected.
+- Every law must be discharged; the compiler rejects an open claim or a wrong proof.
 
 ### 4. Verify Phase (`/gsd-bend:verify` or `/gsd-bend-verify`)
-- Invokes Anti-Goodhart analyzer: verifies zero mocking frameworks (`vi.mock`, `jest.mock`, `sinon`), zero unproven axioms (`axiom bypass:`), zero skipped checks.
-- Invokes Bend 2 formal proof compiler.
-- If all invariants pass across 100% of input values, generates cryptographic `PROOF_ATTESTATION.json`.
+- Invokes the Anti-Goodhart analyzer: flags mocking frameworks (`vi.mock`, `jest.mock`, `sinon`), unproven axioms (`axiom bypass:`), and skipped checks.
+- Runs `bend PROOF.bend`. Without a compiler it falls back to the sampled evaluator, which reports `SAMPLED_NO_COUNTEREXAMPLE` rather than a proof.
+- If every law is discharged, writes `PROOF_ATTESTATION.json` recording the engine that ran and whether it was signed.
 
 ### 5. Ship Phase (`/gsd-bend:ship` or `/gsd-bend-ship`)
 - Evaluates `GSDPhaseBridge.canAdvanceToShip()`.
@@ -113,9 +116,9 @@ All commands support dual slash syntax (`/gsd-bend:<cmd>` or `/gsd-bend-<cmd>`) 
 | Cheating Technique | How standard tests fail | How GSD-Bend blocks it |
 | :--- | :--- | :--- |
 | **Assertion Weakening** | Agent changes `expect(x).toBe(10)` to `toBe(0)` | Invariants in `LAWS.bend` are locked with SHA-256 in `.planning/laws.lock`. Any edit triggers `LAW_LOCK_VIOLATION`. |
-| **Happy-Path Sampling** | Agent only tests `withdraw(100, 50)` | Formal laws quantify over $\forall \text{ initial\_balance, withdraw\_amount}$. |
+| **Happy-Path Sampling** | Agent only tests `withdraw(100, 50)` | Formal laws quantify over every value of every parameter, and a proof must hold for all of them. |
 | **Mock Injection** | Agent mocks database or state return | Static AST audit rejects `jest.mock`, `vi.mock`, and dummy shims. |
-| **Axiom Cheats** | Agent writes `axiom always_true:` | Proof checker rejects unproven axioms; all goals must terminate in `{==}`. |
+| **Axiom Cheats** | Agent writes `axiom always_true:` | Unproven axioms are rejected; a law is discharged by a proof term, not an assertion. |
 
 ---
 

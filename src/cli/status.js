@@ -14,9 +14,10 @@ export function runStatus(options = {}) {
     console.log(`laws.lock:           ${res.files.lock ? (res.lockIntegrity ? 'VERIFIED (Untampered)' : 'TAMPERED / MISMATCH') : 'Missing'}`);
     console.log(`Active Laws:         ${res.declaredLaws.length > 0 ? res.declaredLaws.join(', ') : 'None'}`);
     console.log(`PROOF.bend:          ${res.files.proof ? 'Present' : 'Missing'}`);
-    console.log(`Proof Attestation:   ${res.files.attestation ? (res.attestationValid ? 'VALID (Signed)' : 'INVALID / EXPIRED') : 'Not Issued Yet'}`);
+    console.log(`Proof Attestation:   ${res.files.attestation ? (res.attestationValid ? (res.attestationData.signed ? 'VALID (signed)' : 'VALID (unsigned checksum)') : 'INVALID / EXPIRED') : 'Not Issued Yet'}`);
     if (res.attestationData) {
-      console.log(`Attestation Sig:     ${res.attestationData.attestationSignature.slice(0, 16)}...`);
+      console.log(`Attestation Sig:     ${res.attestationData.attestationSignature.slice(0, 16)}... (${res.attestationData.signatureKind || 'unknown'})`);
+      console.log(`Engine:              ${res.attestationData.engine || 'unknown'}`);
       console.log(`Coverage:            ${res.attestationData.coverage}`);
     }
     console.log('================================================================');
