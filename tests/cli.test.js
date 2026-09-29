@@ -1,4 +1,4 @@
-import { test, describe } from 'node:test';
+import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,6 +7,24 @@ import { runInit } from '../src/cli/init.js';
 import { runLaw } from '../src/cli/law.js';
 import { runVerify } from '../src/cli/verify.js';
 import { runAudit } from '../src/cli/audit.js';
+
+// `node --test` runs each file in its own process and forwards that process's
+// captured stdout to the parent over a v8-serialized IPC channel. A burst of
+// output mis-frames that stream, and the whole file is then reported as
+// "Unable to deserialize cloned data due to invalid or unsupported version"
+// (nodejs/node#56802). The CLI banners these tests trigger are exactly such a
+// burst - roughly a hundred lines per run, emoji and all - and no assertion
+// reads them, so the file stays quiet. Assertions still run against the
+// returned values and the files on disk.
+const QUIET = ['log', 'info', 'warn', 'error'];
+let savedConsole;
+before(() => {
+  savedConsole = Object.fromEntries(QUIET.map((k) => [k, console[k]]));
+  for (const k of QUIET) console[k] = () => {};
+});
+after(() => {
+  for (const k of QUIET) console[k] = savedConsole[k];
+});
 
 describe('CLI Commands', () => {
   test('init creates LAWS.bend, PROOF.bend, and laws.lock', () => {
