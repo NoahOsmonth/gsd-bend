@@ -49,6 +49,8 @@ All commands support dual slash syntax (`/gsd-bend:<cmd>` or `/gsd-bend-<cmd>`) 
 | **Verify** | `/gsd-bend:verify` or `/gsd-bend-verify` | `gsd-bend verify` | Executes formal proof engine, runs anti-cheat audit, and signs `PROOF_ATTESTATION.json`. |
 | **Ship** | `/gsd-bend:ship` or `/gsd-bend-ship` | `gsd-bend ship` | Enforces the cryptographic proof gate, creates `SHIP_SUMMARY.md`, and seals release. |
 | **Status** | `/gsd-bend:status` or `/gsd-bend-status` | `gsd-bend status` | Displays current phase, law lock status, proof attestation validity, and next step. |
+| **Next Step** | `/gsd-bend:next` or `/gsd-bend-next` | `gsd-bend next [--auto]` | Detects project state and guides or automatically advances to the next lifecycle phase. |
+| **Quick Check** | `/gsd-bend:quick` or `/gsd-bend-quick` | `gsd-bend quick [law]` | Fast verification check targeting a specific invariant for rapid inner dev loops. |
 | **Law Management** | `/gsd-bend:law` or `/gsd-bend-law` | `gsd-bend law [lock\|check\|list]` | Computes canonical hashes, checks immutability, or lists active invariants. |
 | **Anti-Cheat Audit**| `/gsd-bend:audit` or `/gsd-bend-audit` | `gsd-bend audit` | Scans for mock injection, unproven axioms, skipped goals, or vacuous proofs. |
 | **Self-Healing** | `/gsd-bend:heal` or `/gsd-bend-heal` | `gsd-bend heal` | Generates structured reflection prompt for AI agents on proof failure or counterexample. |

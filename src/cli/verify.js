@@ -1,9 +1,10 @@
-import { Verifier } from '../core/verifier.js';
+import { GSDPhaseBridge } from '../gsd/phase-bridge.js';
 
 export function runVerify(options = {}) {
+  const root = options.projectRoot || process.cwd();
   console.log('🛡️  Running GSD-Bend Mathematical Verification Gate...\n');
 
-  const result = Verifier.verifyPipeline(options);
+  const result = GSDPhaseBridge.verify(root, options);
 
   if (result.success) {
     console.log('================================================================');

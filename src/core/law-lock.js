@@ -55,6 +55,7 @@ export class LawLock {
       lockedAt: new Date().toISOString(),
       lawsFile: path.basename(lawsPath),
       canonicalSha256: hash,
+      sha256: hash,
       lawCount: lawNames.length,
       laws: lawNames,
       lockedBy: metadata.author || 'gsd-architect',
@@ -68,6 +69,19 @@ export class LawLock {
 
     fs.writeFileSync(lockPath, JSON.stringify(lockData, null, 2), 'utf8');
     return lockData;
+  }
+
+  /**
+   * Convenience helper to lock LAWS.bend for a project directory.
+   * @param {string} projectDir
+   * @param {string} [lawsPath]
+   * @param {object} [metadata]
+   * @returns {object}
+   */
+  static lockLaws(projectDir = process.cwd(), lawsPath, metadata = {}) {
+    const defaultLaws = lawsPath || path.join(projectDir, 'LAWS.bend');
+    const lockPath = path.join(projectDir, '.planning', 'laws.lock');
+    return this.lock(defaultLaws, lockPath, metadata);
   }
 
   /**

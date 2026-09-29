@@ -11,10 +11,20 @@ import { runShip } from './ship.js';
 import { runMapCodebase } from './map-codebase.js';
 import { runNewProject } from './new-project.js';
 import { runStatus } from './status.js';
+import { runNext } from './next.js';
+import { runQuick } from './quick.js';
 import { GSDPhaseBridge } from '../gsd/phase-bridge.js';
 
 export function main(args = process.argv.slice(2)) {
-  const command = args[0] || 'help';
+  let command = args[0] || 'help';
+
+  // Normalize slash commands and namespaces:
+  // e.g. /gsd-bend:plan -> plan, gsd-bend-plan -> plan, /plan -> plan, :plan -> plan
+  if (command.startsWith('/')) command = command.slice(1);
+  if (command.startsWith('gsd-bend:')) command = command.slice('gsd-bend:'.length);
+  if (command.startsWith('gsd-bend-')) command = command.slice('gsd-bend-'.length);
+  if (command.startsWith('gsd:')) command = command.slice('gsd:'.length);
+  if (command.startsWith(':')) command = command.slice(1);
 
   switch (command) {
     case 'install-skill':
@@ -80,6 +90,20 @@ export function main(args = process.argv.slice(2)) {
       return res;
     }
 
+    case 'next': {
+      const isAuto = args.includes('--auto') || args.includes('-a');
+      const res = runNext({ auto: isAuto });
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
+    case 'quick': {
+      const lawName = args[1];
+      const res = runQuick(lawName);
+      if (!res.success) process.exitCode = 1;
+      return res;
+    }
+
     case 'law': {
       const sub = args[1] || 'list';
       const res = runLaw(sub);
@@ -125,6 +149,8 @@ Full GSD Lifecycle Commands:
   verify              Compile Bend 2 formal proofs and generate attestation
   ship                Enforce verification gate and seal release with proof certificate
   status              Display current GSD phase lifecycle and proof gate status
+  next [--auto]       Detect current state and route or advance to the next GSD phase
+  quick [law]         Quickly verify an invariant or run lightweight verification check
 
 Proof & Security Commands:
   law lock            Lock LAWS.bend with SHA-256 canonical hash

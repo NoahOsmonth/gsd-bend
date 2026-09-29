@@ -88,4 +88,88 @@ describe('GSD Phase Bridge & Full Lifecycle', () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  test('STATE.md fallback correctly strips markdown backticks and asterisks', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-state-md-'));
+    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+
+    // Write STATE.md with markdown formatting and no state.json
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), `# GSD Project State\n\n**Current Phase:** \`ship\`  \n**Status:** \`completed\`  \n`, 'utf8');
+
+    const state = GSDPhaseBridge.getGSDState(tmpDir);
+    assert.strictEqual(state.currentPhase, 'ship');
+    assert.strictEqual(state.status, 'completed');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('canAdvanceToShip blocks if PROOF.bend is tampered with post-attestation', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-tamper-proof-'));
+    runNewProject('tamper-proof-test', { projectRoot: tmpDir });
+    runPlan({ projectRoot: tmpDir });
+    runExecute({ projectRoot: tmpDir });
+
+    const verifyRes = runVerify({ projectRoot: tmpDir });
+    assert.strictEqual(verifyRes.success, true);
+
+    // Verify initially passes ship gate
+    const gateBefore = GSDPhaseBridge.canAdvanceToShip(tmpDir);
+    assert.strictEqual(gateBefore.canAdvance, true);
+
+    // Tamper with PROOF.bend post-verification!
+    fs.appendFileSync(path.join(tmpDir, 'PROOF.bend'), '\n# sneaky injection after verify passed!\n', 'utf8');
+
+    // Ship gate MUST detect post-attestation tampering and block
+    const gateAfter = GSDPhaseBridge.canAdvanceToShip(tmpDir);
+    assert.strictEqual(gateAfter.canAdvance, false);
+    assert.match(gateAfter.reason, /PROOF\.bend has been modified/);
+
+    const shipRes = runShip({ projectRoot: tmpDir });
+    assert.strictEqual(shipRes.success, false);
+    assert.strictEqual(shipRes.error, 'GATE_BLOCKED');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('getStatus accurately steps through plan -> execute -> verify -> ship -> done', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-steps-'));
+    runNewProject('step-test', { projectRoot: tmpDir });
+
+    // After plan, next recommended step must be execute (NOT verify!)
+    runPlan({ projectRoot: tmpDir });
+    const statusAfterPlan = GSDPhaseBridge.getStatus(tmpDir);
+    assert.strictEqual(statusAfterPlan.nextStep, 'execute');
+
+    // After execute, next step must be verify
+    runExecute({ projectRoot: tmpDir });
+    const statusAfterExec = GSDPhaseBridge.getStatus(tmpDir);
+    assert.strictEqual(statusAfterExec.nextStep, 'verify');
+
+    // After verify, next step must be ship
+    runVerify({ projectRoot: tmpDir });
+    const statusAfterVerify = GSDPhaseBridge.getStatus(tmpDir);
+    assert.strictEqual(statusAfterVerify.nextStep, 'ship');
+
+    // After ship, next step must be done
+    runShip({ projectRoot: tmpDir });
+    const statusAfterShip = GSDPhaseBridge.getStatus(tmpDir);
+    assert.strictEqual(statusAfterShip.nextStep, 'done');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('GSDPhaseBridge.next accurately routes lifecycle phases', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-next-test-'));
+
+    // 1. Uninitialized -> recommends new-project
+    const nextInit = GSDPhaseBridge.next(tmpDir);
+    assert.strictEqual(nextInit.nextStep, 'new-project');
+
+    // 2. Initialize project
+    runNewProject('next-demo', { projectRoot: tmpDir });
+    const nextMap = GSDPhaseBridge.next(tmpDir);
+    assert.strictEqual(nextMap.nextStep, 'map-codebase');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

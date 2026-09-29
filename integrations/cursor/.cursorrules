@@ -1,17 +1,20 @@
-# Cursor Rules: Bend Formal Proof Verification
+# Cursor Rules: Bend Formal Proof Verification with GSD Core
 # Place this file as .cursorrules at the root of your project
 
 ## Behavioral Directives for AI Coding Agent:
-1. FORMAL VERIFICATION ENFORCEMENT:
-   - When writing sensitive business logic (balances, state machines, permissions, invariants), check if `LAWS.bend` exists.
-   - You MUST NOT fake tests or rely solely on unit tests.
-   - You MUST write the corresponding formal proof in `PROOF.bend`.
+1. GSD CORE LIFECYCLE & FORMAL VERIFICATION ENFORCEMENT:
+   - When writing sensitive business logic (balances, state machines, permissions, invariants), follow the GSD Core loop:
+     Map -> Discuss -> Plan -> Execute -> Verify -> Ship
+   - During the Plan phase, define formal invariants in `LAWS.bend` and lock them with SHA-256 (`gsd-bend plan` or `/gsd-bend:plan`).
+   - During the Execute phase, you MUST write the corresponding formal proofs in `PROOF.bend`.
+   - Never rely on mocked unit tests alone.
 
 2. UNBREAKABLE RULES:
-   - NEVER alter `LAWS.bend`. The file is cryptographically locked with SHA-256 (`.planning/laws.lock`).
+   - NEVER alter `LAWS.bend` during the Execute phase. The file is cryptographically locked with SHA-256 in `.planning/laws.lock`.
    - NEVER use mocking libraries (`jest.mock`, `vi.mock`, `sinon`) or unproven axioms (`axiom ...`) to force a pass.
    - Always verify your work before reporting completion by running:
-     `npx gsd-bend verify` or `node bin/gsd-bend.js verify`
+     `gsd-bend verify` or `gsd-bend next`
+   - Advancement to Ship is strictly gated by mathematical proof attestation (`gsd-bend ship`).
 
 3. PROOF GUIDELINES:
    - Every conditional branch must be proved (`case True:`, `case False:`).

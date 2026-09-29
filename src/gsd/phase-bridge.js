@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { Attestation } from '../core/attestation.js';
 import { LawLock } from '../core/law-lock.js';
 import { LawParser } from '../prover/law-parser.js';
@@ -28,9 +29,11 @@ export class GSDPhaseBridge {
       const content = fs.readFileSync(stateMdPath, 'utf8');
       const phaseMatch = content.match(/phase:\s*([^\n\r]+)/i);
       const statusMatch = content.match(/status:\s*([^\n\r]+)/i);
+      const cleanPhase = phaseMatch ? phaseMatch[1].replace(/[*`_]/g, '').trim() : 'execute';
+      const cleanStatus = statusMatch ? statusMatch[1].replace(/[*`_]/g, '').trim() : 'in_progress';
       return {
-        currentPhase: phaseMatch ? phaseMatch[1].trim() : 'execute',
-        status: statusMatch ? statusMatch[1].trim() : 'in_progress',
+        currentPhase: cleanPhase,
+        status: cleanStatus,
         raw: content
       };
     }
@@ -418,6 +421,38 @@ ${laws.map(l => `- **${l.name}**: \`${l.invariant ? l.invariant.expression : 'un
       };
     }
 
+    // Verify law lock integrity before allowing ship
+    const lawsPath = path.join(projectRoot, 'LAWS.bend');
+    const lockPath = path.join(projectRoot, '.planning', 'laws.lock');
+    if (fs.existsSync(lawsPath) && fs.existsSync(lockPath)) {
+      const lockCheck = LawLock.verify(lawsPath, lockPath);
+      if (!lockCheck.valid) {
+        return {
+          canAdvance: false,
+          reason: `GATE BLOCKED: Law lock integrity check failed before shipping: ${lockCheck.error}`
+        };
+      }
+      if (validation.attestation && validation.attestation.lawHash && lockCheck.actualHash !== validation.attestation.lawHash) {
+        return {
+          canAdvance: false,
+          reason: 'GATE BLOCKED: LAWS.bend has been modified after verification attestation was issued! Re-run `gsd-bend verify`.'
+        };
+      }
+    }
+
+    // Verify PROOF.bend has not been tampered with post-attestation
+    const proofPath = path.join(projectRoot, 'PROOF.bend');
+    if (fs.existsSync(proofPath) && validation.attestation && validation.attestation.proofHash) {
+      const proofContent = fs.readFileSync(proofPath, 'utf8');
+      const currentProofHash = crypto.createHash('sha256').update(proofContent, 'utf8').digest('hex');
+      if (currentProofHash !== validation.attestation.proofHash) {
+        return {
+          canAdvance: false,
+          reason: 'GATE BLOCKED: PROOF.bend has been modified after verification attestation was issued! You must re-run `gsd-bend verify` before shipping.'
+        };
+      }
+    }
+
     return {
       canAdvance: true,
       attestation: validation.attestation
@@ -515,15 +550,41 @@ ${attestation.verifiedLaws.map(law => `- [x] \`${law}\``).join('\n')}
       attestationData = val.attestation;
     }
 
+    const currentPhase = (state.currentPhase || '').toLowerCase();
+    const currentStatus = (state.status || '').toLowerCase();
+
     let nextStep = 'init';
-    if (!hasLaws || !hasLock) {
+    if (!hasLaws && !hasLock && !fs.existsSync(path.join(projectRoot, '.planning'))) {
+      nextStep = 'new-project';
+    } else if (currentPhase === 'new-project') {
+      nextStep = 'map-codebase';
+    } else if (currentPhase === 'map-codebase') {
+      nextStep = 'discuss';
+    } else if (currentPhase === 'discuss') {
       nextStep = 'plan';
-    } else if (!hasProof || !hasAttestation || !attestationValid) {
-      nextStep = 'verify';
-    } else if (state.currentPhase !== 'ship' && attestationValid) {
-      nextStep = 'ship';
-    } else if (state.currentPhase === 'ship') {
+    } else if (currentPhase === 'plan') {
+      nextStep = 'execute';
+    } else if (currentPhase === 'execute') {
+      nextStep = attestationValid ? 'ship' : 'verify';
+    } else if (currentPhase === 'verify') {
+      if (currentStatus === 'failed') {
+        nextStep = 'heal';
+      } else if (attestationValid) {
+        nextStep = 'ship';
+      } else {
+        nextStep = 'verify';
+      }
+    } else if (currentPhase === 'ship') {
       nextStep = 'done';
+    } else {
+      // Fallback inference based on artifacts
+      if (!hasLaws || !hasLock) {
+        nextStep = 'plan';
+      } else if (!hasProof || !hasAttestation || !attestationValid) {
+        nextStep = 'execute';
+      } else {
+        nextStep = 'ship';
+      }
     }
 
     return {
@@ -540,5 +601,90 @@ ${attestation.verifiedLaws.map(law => `- [x] \`${law}\``).join('\n')}
       attestationData,
       nextStep
     };
+  }
+
+  /**
+   * Evaluates current project lifecycle and determines/executes the next logical phase.
+   * @param {string} projectRoot
+   * @param {object} options
+   * @returns {object}
+   */
+  static next(projectRoot = process.cwd(), options = {}) {
+    const status = this.getStatus(projectRoot);
+    const nextPhase = status.nextStep;
+    let actionRecommendation = '';
+    let commandToRun = '';
+
+    switch (nextPhase) {
+      case 'new-project':
+      case 'init':
+        actionRecommendation = 'Project is uninitialized. Scaffold the project and define initial invariants.';
+        commandToRun = 'gsd-bend new-project';
+        break;
+      case 'map-codebase':
+        actionRecommendation = 'Analyze codebase architecture and locate state variables for invariant targets.';
+        commandToRun = 'gsd-bend map-codebase';
+        break;
+      case 'discuss':
+        actionRecommendation = 'Capture domain requirements, failure modes, and safety invariants with the user/architect.';
+        commandToRun = 'gsd-bend discuss';
+        break;
+      case 'plan':
+        actionRecommendation = 'Formulate phase plan, define formal invariants in LAWS.bend, and lock laws.lock with SHA-256.';
+        commandToRun = 'gsd-bend plan';
+        break;
+      case 'execute':
+        actionRecommendation = 'Implement business logic in source files and construct inductive proofs in PROOF.bend.';
+        commandToRun = 'gsd-bend execute';
+        break;
+      case 'verify':
+        actionRecommendation = 'Run the formal verification gate and anti-cheat audit to verify 100% of domain inputs and sign PROOF_ATTESTATION.json.';
+        commandToRun = 'gsd-bend verify';
+        break;
+      case 'heal':
+        actionRecommendation = 'Verification failed or counterexample found. Analyze inductive holes and heal implementation or proofs.';
+        commandToRun = 'gsd-bend heal';
+        break;
+      case 'ship':
+        actionRecommendation = 'Cryptographic proof gate satisfied. Advance to GSD Ship, seal release, and emit SHIP_SUMMARY.md.';
+        commandToRun = 'gsd-bend ship';
+        break;
+      case 'done':
+        actionRecommendation = 'Lifecycle complete. Project is 100% mathematically proven and shipped.';
+        commandToRun = 'gsd-bend status';
+        break;
+      default:
+        actionRecommendation = 'Review project state and run verification.';
+        commandToRun = 'gsd-bend status';
+    }
+
+    if (options.auto) {
+      if (nextPhase === 'map-codebase') return this.mapCodebase(projectRoot, options);
+      if (nextPhase === 'plan') return this.plan(projectRoot, options);
+      if (nextPhase === 'execute') return this.execute(projectRoot, options);
+      if (nextPhase === 'verify') return this.verify(projectRoot, options);
+      if (nextPhase === 'ship') return this.ship(projectRoot, options);
+    }
+
+    return {
+      success: true,
+      currentPhase: status.state.currentPhase,
+      currentStatus: status.state.status,
+      nextStep: nextPhase,
+      recommendedCommand: commandToRun,
+      actionRecommendation,
+      status
+    };
+  }
+
+  /**
+   * Fast verification check for quick targeted invariant audits.
+   * @param {string} projectRoot
+   * @param {string} [lawName]
+   * @param {object} [options]
+   * @returns {object}
+   */
+  static quick(projectRoot = process.cwd(), lawName, options = {}) {
+    return this.verify(projectRoot, { ...options, targetLaw: lawName });
   }
 }

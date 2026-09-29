@@ -21,6 +21,9 @@ export class Verifier {
    * @returns {{ success: boolean, step: string, message: string, attestation?: object, diagnostics?: object[] }}
    */
   static verifyPipeline(options = {}) {
+    if (typeof options === 'string') {
+      options = { projectRoot: options };
+    }
     const root = options.projectRoot || process.cwd();
     const lawsPath = options.lawsFile || path.join(root, 'LAWS.bend');
     const proofPath = options.proofFile || path.join(root, 'PROOF.bend');
